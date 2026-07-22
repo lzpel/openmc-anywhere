@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """openmc-pypi wheel の end-to-end 検証。wheel をインストールした venv で実行する。
 
-3経路を通す:
+4経路を通す:
   (a) subprocess: Model.run() が PATH 上の openmc(.exe) を起動し statepoint を読む
   (b) in-memory: openmc.lib (同梱 libopenmc.{dll,so} の ctypes) で run/tallies/cells/hard_reset
   (c) DAGMC: 引数に .h5m を渡すとトポロジを検査 (上流 legacy テストモデルで 5 cells / 21 surfaces)
+  (d) njoy: --endf を渡すと from_njoy で ENDF→HDF5 変換 (同梱 njoy 実行ファイルの
+      reconr/broadr/heatr×2/gaspr/purr/acer をエンドツーエンドで通す)
 
 OPENMC_CROSS_SECTIONS が設定済みであること。生成物 (xml, statepoint 等) はカレントに落ちるので
 使い捨てディレクトリで実行する (makefile の check がそうしている)。
@@ -13,6 +15,7 @@ OPENMC_CROSS_SECTIONS が設定済みであること。生成物 (xml, statepoin
 import argparse
 
 import openmc
+import openmc.data
 # 関数内で import すると `openmc` が関数ローカル名になり、それ以前の openmc.* 参照が
 # UnboundLocalError になるため module レベルで読む (DLL のロードもここで起きる)
 import openmc.lib
@@ -47,6 +50,7 @@ def build_model():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("h5m", nargs="?", help="DAGMC legacy test model (optional)")
+    parser.add_argument("--endf", help="ENDF file for the from_njoy smoke test (optional)")
     args = parser.parse_args()
 
     print(f"openmc {openmc.__version__}")
@@ -76,6 +80,12 @@ def main():
         u = openmc.DAGMCUniverse(args.h5m)
         print(f"(c) dagmc: n_cells={u.n_cells} n_surfaces={u.n_surfaces}")
         assert (u.n_cells, u.n_surfaces) == (5, 21)
+
+    # (d) 同梱 njoy による ENDF→HDF5 変換 (293.6 K は "294K" グループに丸められる)
+    if args.endf:
+        nuc = openmc.data.IncidentNeutron.from_njoy(args.endf, temperatures=[293.6])
+        print(f"(d) njoy: {nuc.name} temperatures={nuc.temperatures}")
+        assert "294K" in nuc.temperatures
 
     print("all checks passed")
 
