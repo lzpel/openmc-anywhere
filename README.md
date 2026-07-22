@@ -12,6 +12,24 @@ model.run()            # 同梱の openmc 実行ファイルが venv の Scripts
 ```
 
 断面積データは含まない。従来どおり `OPENMC_CROSS_SECTIONS` で各自のライブラリを指すこと。
+ただし **NJOY2016 を同梱**しているので、ENDF ファイルから
+`openmc.data.IncidentNeutron.from_njoy("n-092_U_235.endf", temperatures=[300,600,900])`
+で自前変換できる (njoy 実行ファイルが venv の PATH に入る)。
+
+## 使い方 (uv)
+
+```toml
+[tool.uv.sources]
+openmc-pypi = { index = "openmc-pypi" }
+
+[[tool.uv.index]]
+name = "openmc-pypi"
+url = "https://lzpel.github.io/openmc-pypi/wheel/"
+```
+
+これを pyproject.toml に書いて `uv add openmc-pypi`。index は GitHub Pages 上の
+PEP 503 simple index で、wheel 本体は GitHub Release asset (`make release` で公開、
+Pages workflow が index を再生成する)。
 
 ## wheel に入っているもの
 
@@ -20,8 +38,11 @@ model.run()            # 同梱の openmc 実行ファイルが venv の Scripts
 | openmc python パッケージ | `openmc/` | 上流 `src/openmc/openmc` そのまま (+ 下記パッチ) |
 | `openmc(.exe)` | wheel の `.data/scripts/` → venv の `Scripts`/`bin` | `Model.run()` が PATH で見つける実行ファイル。ランタイム込み静的リンクで自己完結 |
 | `libopenmc.{dll,so}` | `openmc/lib/` | `openmc.lib` (ctypes) がロードする共有ライブラリ。同じく自己完結 |
+| `njoy(.exe)` | 同じく `.data/scripts/` | `IncidentNeutron.from_njoy()` が Popen(['njoy']) で起動する NJOY2016 (2016.79)。自己完結 |
 
 HDF5 / MOAB / DAGMC は exe と共有ライブラリの中に静的リンク済み (DAGMC 有効)。
+NJOY2016 のライセンス (LANL の BSD-3 系。告知同梱でバイナリ再配布可) は wheel の
+dist-info に `NJOY2016-LICENSE` として同梱している。
 
 ## ビルド
 

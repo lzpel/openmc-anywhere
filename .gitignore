@@ -7,6 +7,9 @@ venv-check/
 src/hdf5-*/
 src/moab/
 src/dagmc/
+src/njoy/
+# njoy をカレントで直接叩くと出力リスティング output を残す
+/output
 # ビルド副産物 (MOAB が repo 直下に moab.make を落とす。__pycache__ は hatch_build.py)
 # 先頭の / が必須: hatchling は root の .gitignore を wheel のファイル選別にも適用するので、
 # 任意階層にマッチする lib/ だと src/openmc/openmc/lib/ の *.py まで wheel から消える (実測:
