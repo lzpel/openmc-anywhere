@@ -1,0 +1,5 @@
+build/
+prefix/
+out/
+dist/
+venv-check/

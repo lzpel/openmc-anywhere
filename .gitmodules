@@ -1,0 +1,4 @@
+[submodule "src/openmc"]
+	path = src/openmc
+	url = https://github.com/openmc-dev/openmc.git
+	ignore = dirty
