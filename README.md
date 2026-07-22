@@ -78,6 +78,34 @@ HDF5/MOAB/DAGMC のバージョンピンと CMake フラグの根拠はそちら
   共有 lib 1つだけをビルドフックの `force_include` (exclude より優先) で戻す。
   Windows/Linux がソースツリーを共有するため、反対側のライブラリの残骸を拾わないための構成。
 
+## 実装中に判明した想定外の問題
+
+1. **Windows の `-static` shared リンクは一発で成功**した (事前には未検証のリスク扱い)。
+   exe と DLL のビルドディレクトリ分離により、懸念だった `_Unwind_Resume` の二重定義も
+   最初から発生しなかった。
+2. **Linux の FindHDF5 は静的のみのインストールを見つけられない** ため
+   `HDF5_USE_STATIC_LIBRARIES=ON` が必要 (実測: moab の configure で
+   `Could NOT find HDF5` )。ただし **同じフラグを Windows に渡すとリンク順が変わって
+   逆に壊れる** (実測: それまで通っていた exe リンクが `H5Aopen_name` 未解決で失敗)
+   ため、makefile では Linux 限定にしている (`HDF5_STATIC_ARG`)。
+3. **リンク順問題**: CMake が組むリンク行は `...libhdf5.a ... libMOAB.a` の順になり、
+   単一パスの ld では MOAB の mhdf だけが使う deprecated API (`H5Aopen_name` /
+   `H5Fis_hdf5`) が未解決になる (他の H5 シンボルは libopenmc が先に引き込んだ
+   オブジェクトで偶然足りる)。`CMAKE_CXX_STANDARD_LIBRARIES` で HDF5 をリンク行末尾に
+   再掲して解決。
+4. **gcc-toolset の `libgomp.a` は非 PIC** で .so に畳めない (実測: TLS 再配置
+   R_X86_64_TPOFF32 でリンク失敗)。共有 lib のみ動的 libgomp に切り替え、
+   `auditwheel repair` が `libgomp.so.1` を同梱して manylinux_2_28 に retag する。
+   exe は静的 libgomp のまま。
+5. **一番の山場**: Linux で `openmc.lib` の init が segfault。原因は .so が静的リンクした
+   HDF5 のシンボルを全エクスポートし、同一プロセスの h5py が持つ別ビルドの HDF5 と
+   ELF のシンボル介入を起こすこと (h5py を import しないプロセスでは同じ .so が正常動作する
+   ことで特定)。`-Wl,--exclude-libs,ALL` で解決。Windows の DLL は介入が構造的に無いため
+   影響なし。
+6. **hatchling は submodule 内の .gitignore を適用しない** (予想と逆。実測:
+   `liblibopenmc.a` も `libopenmc.dll` も素通りで wheel に入った)。pyproject の
+   `exclude` + ビルドフックの `force_include` でビルド産物の混入を制御。
+
 ## 既知の制約
 
 - `openmc.lib` の DLL (Windows) は静的 libgomp を含むため、プロセス内でのアンロードは
