@@ -21,10 +21,14 @@ export MSYS_NO_PATHCONV=1
 HDF5_VER   ?= 2.1.1
 MOAB_VER   ?= 5.6.0
 DAGMC_REF  ?= v3.2.4
+NJOY_REF   ?= 2016.79
 JOBS       ?= 8
 
 # windows (ホスト) / linux (make linux が docker 内で上書き)
 OSNAME ?= windows
+
+# pyproject.toml の version と単一ソース化 (submodule を進めたら pyproject 側を上げる)
+VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
 
 SRC    := $(CURDIR)/src
 BUILD  := $(CURDIR)/build/$(OSNAME)
@@ -36,6 +40,15 @@ OUT    := $(CURDIR)/out/$(OSNAME)
 # 存在しない cc を掴んで configure が落ちる。= ならコマンドライン指定は依然優先される。
 CC     = gcc
 CXX    = g++
+# FC も同じ理由で = にする (GNU Make の組み込みデフォルトは存在しない f77)。
+FC     = gfortran
+
+# NJOY の CMake は configure 時に Python3 を要求する。ホストの python は
+# Microsoft Store のスタブなので uv 管理のインタプリタを名指しする
+# (manylinux コンテナにも uv が入っているので両OSで同じ書き方が通る)。
+# subst: Windows の uv はバックスラッシュ区切りで返し、shell 経由で \ が食われて
+# "C:UserssmithAppData..." になる (実測) ためスラッシュに正規化する。
+PYTHON3 = $(subst \,/,$(shell uv python find))
 
 # CMake の FindOpenMP は libgomp を「インポートライブラリの絶対パス」
 # (.../libgomp.dll.a) として渡してくる。絶対パス指定は -static では覆せないので、
@@ -54,6 +67,9 @@ ifeq ($(OSNAME),windows)
   EXE            = $(OUT)/openmc.exe
   SHLIB          = $(SRC)/openmc/openmc/lib/libopenmc.dll
   LINK_TAIL      =
+  NJOY_EXE       = $(OUT)/njoy.exe
+  # -static 一発で libgfortran/quadmath/winpthread まで畳める (openmc.exe と同じ)
+  NJOY_STATIC    = -static
 else
   RUNTIME_STATIC = -static-libgcc -static-libstdc++
   PLAT           = manylinux_2_28_x86_64
@@ -75,12 +91,17 @@ else
   # 指定なしで通っており、指定するとリンク順が変わって MOAB の deprecated API
   # (H5Aopen_name) が未解決になる (実測)。
   HDF5_STATIC_ARG = -DHDF5_USE_STATIC_LIBRARIES=ON
+  NJOY_EXE       = $(OUT)/njoy
+  # gcc-toolset-14 に libgfortran.a / libquadmath.a がある (実測 probe)。
+  # -static-libquadmath は GCC>=13。glibc は動的のまま = manylinux の前提どおり
+  NJOY_STATIC    = -static-libgfortran -static-libquadmath -static-libgcc
 endif
 PLAT_BUILD ?= $(PLAT)
 
 # 検証用の断面積とデータ。wheel には焼き込まない (利用者が OPENMC_CROSS_SECTIONS で渡す)。
 XSDIR ?= C:/Users/smith/mhd-tbr-stell/sandbox-openmc/data
 XS    ?= $(XSDIR)/lib/cross_sections.xml
+ENDF  ?= $(XSDIR)/endf/Li6.endf
 H5M   := $(SRC)/openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m
 
 # patches/*.patch を全部当てる。適用済みなら黙って飛ばす (.PHONY なので毎回このレシピに
@@ -100,6 +121,7 @@ HDF5_URL   = https://github.com/HDFGroup/hdf5/releases/download/$(HDF5_VER)/hdf5
 # config/{logging,dist,distcheck}.cmake が EXTRA_DIST から漏れており configure が落ちる。
 MOAB_URL   = https://bitbucket.org/fathomteam/moab.git
 DAGMC_URL  = https://github.com/svalinn/DAGMC.git
+NJOY_URL   = https://github.com/njoy/NJOY2016.git
 
 # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: hdf5/moab/dagmc の静的 archive は Linux で
 # libopenmc.so に畳まれるので PIC が必須。Windows (PE) では無害な no-op。
@@ -112,7 +134,7 @@ CMAKE_COMMON = -DCMAKE_BUILD_TYPE=Release \
 # 出す必要があるため (sandbox-openfoam/epotFoam 以来のイディオム)。
 E = 1>&2
 
-.PHONY: default src hdf5 moab dagmc openmc-exe openmc-lib wheel check linux linux-inner check-linux clean
+.PHONY: default src hdf5 moab dagmc njoy openmc-exe openmc-lib wheel check linux linux-inner check-linux release clean
 
 # ---- デフォルト: wheel をビルドし、そのパスだけを stdout に出す ----
 default: wheel
@@ -182,6 +204,25 @@ dagmc: moab
 	cmake --build $(BUILD)/dagmc -j $(JOBS) $(E)
 	cmake --install $(BUILD)/dagmc $(E)
 
+# ================= 段1.7: NJOY2016 =================
+# openmc.data.IncidentNeutron.from_njoy() が PATH 上の literal 'njoy' を Popen する
+# (openmc/data/njoy.py:358) ので、openmc.exe と同じ .data/scripts 同梱で成立する。
+# tests/ は ctest 登録のみでビルド産物なし → njoy_executable ターゲットだけビルドすれば
+# テスト無効化スイッチは不要。install ターゲットが無いので build dir から自前でコピー。
+# CMAKE_COMMON は使わない (Fortran 専用で C/C++・install prefix・PIC のどれも不要)。
+# Windows ビルドは前例なし (上流 CI は ubuntu のみ、conda-forge は skip: win) — 壊れたら
+# patches/njoy/ に最小パッチを足す。
+njoy:
+	@test -d $(SRC)/njoy/.git \
+	  || git clone --branch $(NJOY_REF) --depth 1 $(NJOY_URL) $(SRC)/njoy $(E)
+	@$(call APPLY_PATCHES,njoy,$(SRC)/njoy)
+	cmake -S $(SRC)/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release \
+	  -DCMAKE_Fortran_COMPILER=$(FC) -DPython3_EXECUTABLE=$(PYTHON3) \
+	  -DCMAKE_EXE_LINKER_FLAGS="$(NJOY_STATIC)" $(E)
+	cmake --build $(BUILD)/njoy -j $(JOBS) --target njoy_executable $(E)
+	@mkdir -p $(OUT)
+	cp $(BUILD)/njoy/njoy$(suffix $(NJOY_EXE)) $(NJOY_EXE) $(E)
+
 # ================= 段2a: openmc 実行ファイル (libopenmc 静的) =================
 # OPENMC_STATIC_LIB=ON (patches/openmc/static-lib.patch) で libopenmc を静的にし、
 # exe をランタイムごと自己完結にする。DLL と exe を同じビルドでリンクすると MinGW の
@@ -242,7 +283,7 @@ openmc-lib: src hdf5 dagmc
 # uv は manylinux イメージにも同梱されているので両OSで同じコマンドが使える。
 WHEEL_CMD = uv build --wheel --out-dir dist
 
-wheel: openmc-exe openmc-lib
+wheel: openmc-exe openmc-lib njoy
 	OPENMC_PYPI_PLAT=$(PLAT_BUILD) $(WHEEL_CMD) $(E)
 
 # ================= 検証 =================
@@ -259,13 +300,15 @@ check: wheel
 	@! objdump -p $(SHLIB) | grep "DLL Name" | grep -viE "KERNEL32|SHELL32|SHLWAPI|api-ms-win-crt|ntdll|msvcrt" \
 	  || { echo "unexpected DLL dependency" >&2; exit 1; }
 	@objdump -p $(SHLIB) | grep -q openmc_init || { echo "openmc_init not exported" >&2; exit 1; }
+	@! objdump -p $(NJOY_EXE) | grep "DLL Name" | grep -viE "KERNEL32|SHELL32|SHLWAPI|api-ms-win-crt|ntdll|msvcrt" \
+	  || { echo "unexpected DLL dependency in njoy" >&2; exit 1; }
 	uv venv venv-check --python 3.12 --allow-existing $(E)
 	uv pip install --python venv-check --reinstall dist/openmc_pypi-*-$(PLAT).whl $(E)
 	@rm -rf $(BUILD)/check-run && mkdir -p $(BUILD)/check-run
 	cd $(BUILD)/check-run && \
 	  PATH="$$(cygpath -u $(CURDIR)/venv-check/Scripts):$$PATH" \
 	  OPENMC_CROSS_SECTIONS="$(XS)" \
-	  $(CURDIR)/venv-check/Scripts/python.exe $(CURDIR)/check.py $(H5M)
+	  $(CURDIR)/venv-check/Scripts/python.exe $(CURDIR)/check.py $(H5M) --endf "$(ENDF)"
 
 # ================= Linux (Docker) =================
 # ビルドは manylinux_2_28 コンテナ内で同じ makefile を OSNAME=linux で回す。
@@ -286,6 +329,10 @@ linux-inner: wheel
 	  || { echo "unexpected shared dependency in libopenmc.so" >&2; exit 1; }
 	@! ldd $(OUT)/openmc | grep -viE "linux-vdso|libc\.|libm\.|libpthread|libdl|librt|ld-linux" | grep -q "=>" \
 	  || { echo "unexpected shared dependency in openmc" >&2; exit 1; }
+	@# libmvec は glibc 2.22+ 同梱のベクトル数学ライブラリ (gfortran の自動ベクトル化が参照)。
+	@# manylinux_2_28 の glibc 2.28 前提に含まれるので許可する。
+	@! ldd $(NJOY_EXE) | grep -viE "linux-vdso|libc\.|libm\.|libmvec|libpthread|libdl|librt|ld-linux" | grep -q "=>" \
+	  || { echo "unexpected shared dependency in njoy" >&2; exit 1; }
 	auditwheel repair --plat $(PLAT) -w dist dist/openmc_pypi-*-$(PLAT_BUILD).whl $(E)
 	rm dist/openmc_pypi-*-$(PLAT_BUILD).whl
 
@@ -296,7 +343,18 @@ check-linux:
 	  -e OPENMC_CROSS_SECTIONS=/data/lib/cross_sections.xml python:3.12 \
 	  bash -c "pip install -q /io/dist/openmc_pypi-*-manylinux*.whl \
 	    && mkdir /tmp/run && cd /tmp/run \
-	    && python /io/check.py /io/src/openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m"
+	    && python /io/check.py /io/src/openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m \
+	         --endf /data/endf/Li6.endf"
+
+# ================= 公開 =================
+# wheel は git に入れず Release asset として配る。publish イベントを Pages workflow
+# (.github/workflows/pages.yml) が拾い、simple index を再生成する。両OSの wheel が
+# dist/ に揃ってから叩くこと (make && make linux)。バージョン明示 glob で
+# 古い版の wheel が紛れ込むのを防ぐ。タグ既存なら gh が落ちる (= 意図通り)。
+release:
+	gh release create v$(VERSION) --title v$(VERSION) \
+	  --notes "openmc + libopenmc + njoy bundled wheels" \
+	  dist/openmc_pypi-$(VERSION)-py3-none-*.whl $(E)
 
 clean:
 	rm -rf $(CURDIR)/build $(CURDIR)/prefix $(CURDIR)/out dist venv-check

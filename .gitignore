@@ -8,6 +8,9 @@ src/hdf5-*/
 src/moab/
 src/dagmc/
 # ビルド副産物 (MOAB が repo 直下に moab.make を落とす。__pycache__ は hatch_build.py)
-lib/
-lib64/
+# 先頭の / が必須: hatchling は root の .gitignore を wheel のファイル選別にも適用するので、
+# 任意階層にマッチする lib/ だと src/openmc/openmc/lib/ の *.py まで wheel から消える (実測:
+# DLL だけ force_include で残り namespace package 化、openmc.lib.is_initialized が消失)。
+/lib/
+/lib64/
 __pycache__/
