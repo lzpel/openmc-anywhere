@@ -1,0 +1,25 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 61d2cc6c5..ce9e17622 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -480,8 +480,10 @@ list(APPEND libopenmc_SOURCES
+   src/external/quartic_solver.cpp
+   src/external/Faddeeva.cc)
+ 
++option(OPENMC_STATIC_LIB "Build libopenmc as a static library" OFF)
++
+ # For Visual Studio compilers
+-if(MSVC)
++if(MSVC OR OPENMC_STATIC_LIB)
+   # Use static library (otherwise explicit symbol portings are needed)
+   add_library(libopenmc STATIC ${libopenmc_SOURCES})
+ 
+@@ -495,7 +497,7 @@ endif()
+ add_library(OpenMC::libopenmc ALIAS libopenmc)
+ 
+ # Avoid vs error lnk1149 :output filename matches input filename
+-if(NOT MSVC)
++if(NOT (MSVC OR OPENMC_STATIC_LIB))
+   set_target_properties(libopenmc PROPERTIES OUTPUT_NAME openmc)
+ endif()
+ 

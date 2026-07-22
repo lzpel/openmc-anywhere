@@ -1,0 +1,10 @@
+diff --git a/openmc/__init__.py b/openmc/__init__.py
+index c204929c8..55d2674ff 100644
+--- a/openmc/__init__.py
++++ b/openmc/__init__.py
+@@ -42,4 +42,4 @@ from openmc.model import Model, SearchResult
+ from . import examples
+ 
+ 
+-__version__ = importlib.metadata.version("openmc")
++__version__ = importlib.metadata.version("openmc-pypi")
