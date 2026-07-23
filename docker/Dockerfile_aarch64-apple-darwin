@@ -1,0 +1,81 @@
+# openmc-pypi 用 osxcross toolchain イメージ (aarch64-apple-darwin)。実験的。
+# 構成と設計意図は x86_64-apple-darwin 版と同一 (詳細コメントはそちら)。差分は
+# コンパイラ wrapper (oa64-*)・CMAKE_SYSTEM_PROCESSOR・flang の --target のみ。
+FROM ubuntu:24.04
+
+# LLVM 21 が必須: flang-rt は 21 で導入 (詳細は x86_64 版のコメント)
+ARG LLVM=21
+ARG LLVM_SRC=21.1.8
+ARG OSXCROSS_REF=28b7b67c937f4c620a7bf1e7b6dbce057bb7691e
+ARG SDK_URL=https://github.com/joseluisq/macosx-sdks/releases/download/14.5/MacOSX14.5.sdk.tar.xz
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg git make patch file \
+      xz-utils bzip2 cpio zip unzip cmake python3 \
+      libssl-dev liblzma-dev libxml2-dev zlib1g-dev \
+ && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /etc/apt/trusted.gpg.d/apt-llvm-org.asc \
+ && echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM} main" > /etc/apt/sources.list.d/llvm.list \
+ && apt-get update && apt-get install -y --no-install-recommends \
+      clang-${LLVM} lld-${LLVM} llvm-${LLVM} flang-${LLVM} \
+ && ln -sf /usr/lib/llvm-${LLVM}/bin/clang   /usr/local/bin/clang \
+ && ln -sf /usr/lib/llvm-${LLVM}/bin/clang++ /usr/local/bin/clang++ \
+ && f=$(find /usr/lib/llvm-${LLVM}/bin -maxdepth 1 -name 'flang*' | head -n1) \
+ && ln -sf "$f" /usr/local/bin/flang \
+ && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/tpoechtrager/osxcross.git /opt/osxcross-src \
+ && git -C /opt/osxcross-src checkout ${OSXCROSS_REF} \
+ && curl -fL -o /opt/osxcross-src/tarballs/$(basename ${SDK_URL}) ${SDK_URL} \
+ && cd /opt/osxcross-src && UNATTENDED=1 TARGET_DIR=/opt/osxcross ./build.sh \
+ && rm -rf /opt/osxcross-src
+
+ENV PATH=/opt/osxcross/bin:$PATH
+
+RUN SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
+ && P=$(ls /opt/osxcross/bin/*-apple-darwin*-otool | head -n1 | sed 's/-otool$//') && { \
+      echo "set(CMAKE_SYSTEM_NAME Darwin)"; \
+      echo "set(CMAKE_SYSTEM_PROCESSOR arm64)"; \
+      echo "set(CMAKE_OSX_SYSROOT $SDK)"; \
+      echo "set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)"; \
+      echo "set(CMAKE_C_COMPILER oa64-clang)"; \
+      echo "set(CMAKE_CXX_COMPILER oa64-clang++)"; \
+      echo "set(CMAKE_Fortran_COMPILER flang)"; \
+      echo "set(CMAKE_Fortran_FLAGS_INIT \"--target=arm64-apple-macosx11.0 -isysroot $SDK -fuse-ld=lld -L/opt/flang-rt/lib\")"; \
+      echo "# cctools は <triple>- prefix 名しか無く、prefix を推測できない Fortran (flang) の"; \
+      echo "# enable_language が install_name_tool 探索で落ちる (実測) ため全部明示する"; \
+      echo "set(CMAKE_AR $P-ar)"; \
+      echo "set(CMAKE_RANLIB $P-ranlib)"; \
+      echo "set(CMAKE_STRIP $P-strip)"; \
+      echo "set(CMAKE_INSTALL_NAME_TOOL $P-install_name_tool)"; \
+    } > /opt/toolchain.cmake \
+ && cd /opt/osxcross/bin && ln -sf $(ls *-apple-darwin*-otool | head -n1) darwin-otool
+
+RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_SRC}/llvm-project-${LLVM_SRC}.src.tar.xz | tar -xJ -C /opt \
+ && cmake -S /opt/llvm-project-${LLVM_SRC}.src/runtimes -B /tmp/flang-rt \
+      -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake -DCMAKE_BUILD_TYPE=Release \
+      -DLLVM_ENABLE_RUNTIMES=flang-rt -DCMAKE_Fortran_COMPILER_WORKS=ON \
+      -DCMAKE_INSTALL_PREFIX=/opt/flang-rt \
+ && cmake --build /tmp/flang-rt -j$(nproc) && cmake --install /tmp/flang-rt \
+ && mkdir -p /opt/flang-rt/lib \
+ && find /opt/flang-rt -name 'libflang_rt*.a' -exec cp -n {} /opt/flang-rt/lib/ \; \
+ && test -f /opt/flang-rt/lib/libflang_rt.runtime.a \
+ && cmake -S /opt/llvm-project-${LLVM_SRC}.src/openmp -B /tmp/omp \
+      -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake -DCMAKE_BUILD_TYPE=Release \
+      -DLIBOMP_ENABLE_SHARED=OFF -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
+      -DCMAKE_INSTALL_PREFIX=/opt/omp \
+ && cmake --build /tmp/omp -j$(nproc) && cmake --install /tmp/omp \
+ && SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
+ && cp /opt/omp/lib/libomp.a $SDK/usr/lib/ \
+ && cp /opt/omp/include/*.h $SDK/usr/include/ \
+ && rm -rf /tmp/flang-rt /tmp/omp /opt/llvm-project-${LLVM_SRC}.src
+# libomp.a と omp.h の SDK コピーの理由は x86_64 版のコメント参照
+
+ENV CC=oa64-clang \
+    CXX=oa64-clang++ \
+    FC=flang \
+    OTOOL=darwin-otool \
+    MACOSX_DEPLOYMENT_TARGET=11.0 \
+    CMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+    OPENMP_LIB_NAME=omp \
+    OPENMP_LIB=/opt/omp/lib/libomp.a

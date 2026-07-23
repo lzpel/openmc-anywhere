@@ -1,0 +1,4 @@
+# openmc-pypi 用 toolchain イメージ (aarch64-unknown-linux-gnu)。
+# 内容は x86_64 版と同じ (詳細コメントはそちら)。x86_64 ホストで動かすと QEMU で
+# 数時間かかるので、CI では ubuntu-24.04-arm ランナーでネイティブ実行する。
+FROM quay.io/pypa/manylinux_2_28_aarch64

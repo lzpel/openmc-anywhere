@@ -34,10 +34,10 @@ Upstream = "https://github.com/openmc-dev/openmc"
 packages = ["src/openmc/openmc"]
 # hatchling は submodule 内の .gitignore を適用しない (実測: *.a も *.dll も素通り) ので、
 # ビルド産物の混入をここで締め出す: 静的 archive (exe ビルドの POST_BUILD が落とす
-# liblibopenmc.a) と共有ライブラリ両方。共有 lib は win/linux がソースツリーを共有するため
-# 反対プラットフォームの残骸があり得る。現プラットフォームの正しい1つだけを
-# hatch_build.py の force_include (exclude より優先) が戻す
-exclude = ["*.a", "*.dll", "*.so"]
+# liblibopenmc.a) と共有ライブラリ両方。共有 lib は win/linux/mac の全 TARGET がソース
+# ツリーを共有するため他ターゲットの残骸があり得る。現ターゲットの正しい1つだけを
+# hatch_build.py の force_include (exclude より優先) が out/<triple>/ から戻す
+exclude = ["*.a", "*.dll", "*.so", "*.dylib"]
 
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"

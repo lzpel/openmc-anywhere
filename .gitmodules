@@ -2,3 +2,22 @@
 	path = src/openmc
 	url = https://github.com/openmc-dev/openmc.git
 	ignore = dirty
+[submodule "src/hdf5"]
+	path = src/hdf5
+	url = https://github.com/HDFGroup/hdf5.git
+	shallow = true
+	ignore = dirty
+[submodule "src/moab"]
+	path = src/moab
+	url = https://bitbucket.org/fathomteam/moab.git
+	ignore = dirty
+[submodule "src/dagmc"]
+	path = src/dagmc
+	url = https://github.com/svalinn/DAGMC.git
+	shallow = true
+	ignore = dirty
+[submodule "src/njoy"]
+	path = src/njoy
+	url = https://github.com/njoy/NJOY2016.git
+	shallow = true
+	ignore = dirty

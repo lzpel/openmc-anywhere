@@ -1,0 +1,3 @@
+# docker/Dockerfile_* は project 非依存の toolchain イメージで COPY を一切しない
+# (ソースは実行時 bind-mount)。ビルドコンテキストの転送を空にする (src/ は数 GB ある)。
+*
