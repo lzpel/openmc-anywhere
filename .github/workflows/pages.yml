@@ -1,7 +1,7 @@
 # Release assets の wheel から PEP 503 simple index を組んで GitHub Pages に配る。
 # wheel 本体は git 履歴に入れない (Release asset)。index は releases API だけから
 # 生成できるので checkout 不要。Pages は build_type=workflow 設定済み。
-# 消費側: [[tool.uv.index]] url = "https://lzpel.github.io/openmc-pypi/wheel/"
+# 消費側: [[tool.uv.index]] url = "https://lzpel.github.io/openmc-anywhere/wheel/"
 name: pages
 on:
   release:
@@ -25,16 +25,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p site/wheel/openmc-pypi
+          mkdir -p site/wheel/openmc-anywhere
+          # プレフィックスで絞るのは、改名前の配布名で作られた wheel (openmc_pypi-*.whl) が
+          # 同じ Release にぶら下がったままのため。openmc-anywhere の project page に
+          # 別配布名の wheel を載せてはいけない (PEP 503)。
           gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            --jq '.[].assets[] | select(.name | endswith(".whl")) | .browser_download_url' > urls.txt
+            --jq '.[].assets[] | select(.name | startswith("openmc_anywhere-") and endswith(".whl")) | .browser_download_url' > urls.txt
           test -s urls.txt   # wheel ゼロの index を配らない (release より先に手動起動した場合の防波堤)
           {
             echo '<!DOCTYPE html><html><head><meta name="pypi:repository-version" content="1.0"></head><body>'
             while read -r u; do printf '<a href="%s">%s</a><br>\n' "$u" "$(basename "$u")"; done < urls.txt
             echo '</body></html>'
-          } > site/wheel/openmc-pypi/index.html
-          echo '<!DOCTYPE html><html><body><a href="openmc-pypi/">openmc-pypi</a></body></html>' \
+          } > site/wheel/openmc-anywhere/index.html
+          echo '<!DOCTYPE html><html><body><a href="openmc-anywhere/">openmc-anywhere</a></body></html>' \
             > site/wheel/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
