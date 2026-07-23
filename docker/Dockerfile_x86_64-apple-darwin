@@ -92,6 +92,11 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
       -DLIBOMP_ENABLE_SHARED=OFF -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
       -DCMAKE_INSTALL_PREFIX=/opt/omp \
  && cmake --build /tmp/omp -j$(nproc) && cmake --install /tmp/omp \
+ && RT=/opt/llvm-project-${LLVM_SRC}.src/compiler-rt/lib/builtins \
+ && P=$(ls /opt/osxcross/bin/x86_64-apple-darwin*-ar | head -n1 | sed 's/-ar$//') \
+ && for f in divdc3 divsc3 muldc3 mulsc3; do o64-clang -O2 -c $RT/$f.c -o /tmp/omp/$f.o; done \
+ && $P-ar rs /opt/omp/lib/libomp.a /tmp/omp/divdc3.o /tmp/omp/divsc3.o /tmp/omp/muldc3.o /tmp/omp/mulsc3.o \
+ && $P-ar rs /opt/flang-rt/lib/libflang_rt.runtime.a /tmp/omp/divdc3.o /tmp/omp/divsc3.o /tmp/omp/muldc3.o /tmp/omp/mulsc3.o \
  && SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
  && cp /opt/omp/lib/libomp.a $SDK/usr/lib/ \
  && cp /opt/omp/include/*.h $SDK/usr/include/ \
@@ -99,6 +104,10 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
 # libomp.a と omp.h は SDK にもコピーする: clang の -fopenmp=libomp が暗黙に足す -lomp と
 # #include <omp.h> が追加フラグ無しで解決し、CMake FindOpenMP の try_compile も通る
 # (-L を makefile 側に書かずに済む = 環境設定がイメージに閉じる)
+# compiler-rt builtins の同梱: apt の clang (linux 用) は darwin 向け libclang_rt.osx.a を
+# 持たず、complex 除算の libcall __div{d,s}c3 が解決できない (aarch64 の openmc リンクで
+# 実測。x86_64 は現状踏まないが、コード生成次第で踏み得るので対称に同梱する)。詳細は
+# aarch64 版のコメント参照。
 
 # makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)。
 # OPENMP_FLAGS: FindOpenMP は FLAGS と LIB_NAMES の両方が事前設定のときだけ try_compile
