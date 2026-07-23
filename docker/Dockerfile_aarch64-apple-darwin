@@ -1,4 +1,4 @@
-# openmc-pypi 用 osxcross toolchain イメージ (aarch64-apple-darwin)。実験的。
+# openmc-anywhere 用 osxcross toolchain イメージ (aarch64-apple-darwin)。実験的。
 # 構成と設計意図は x86_64-apple-darwin 版と同一 (詳細コメントはそちら)。差分は
 # コンパイラ wrapper (oa64-*)・CMAKE_SYSTEM_PROCESSOR・flang の --target のみ。
 FROM ubuntu:24.04
