@@ -65,12 +65,25 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
       -DLIBOMP_ENABLE_SHARED=OFF -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
       -DCMAKE_INSTALL_PREFIX=/opt/omp \
  && cmake --build /tmp/omp -j$(nproc) && cmake --install /tmp/omp \
+ && RT=/opt/llvm-project-${LLVM_SRC}.src/compiler-rt/lib/builtins \
+ && P=$(ls /opt/osxcross/bin/*-apple-darwin*-ar | head -n1 | sed 's/-ar$//') \
+ && for f in divdc3 divsc3 muldc3 mulsc3; do oa64-clang -O2 -c $RT/$f.c -o /tmp/omp/$f.o; done \
+ && $P-ar rs /opt/omp/lib/libomp.a /tmp/omp/divdc3.o /tmp/omp/divsc3.o /tmp/omp/muldc3.o /tmp/omp/mulsc3.o \
+ && $P-ar rs /opt/flang-rt/lib/libflang_rt.runtime.a /tmp/omp/divdc3.o /tmp/omp/divsc3.o /tmp/omp/muldc3.o /tmp/omp/mulsc3.o \
  && SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
  && cp /opt/omp/lib/libomp.a $SDK/usr/lib/ \
  && cp /opt/omp/include/*.h $SDK/usr/include/ \
  && rm -rf /tmp/flang-rt /tmp/omp /opt/llvm-project-${LLVM_SRC}.src
+# compiler-rt builtins の同梱: apt の clang (linux 用) は darwin 向け libclang_rt.osx.a を
+# 持たず、libomp.a の complex atomic (__kmpc_atomic_cmplx*_div) が参照する __div{d,s}c3 が
+# arm64 の openmc リンクで未解決になる (CI run 29988292782 で実測。x86_64 はこの libcall を
+# 踏まない)。同じ llvm-project ソースから該当 builtins だけをコンパイルして libomp.a に
+# 同梱する。flang_rt にも足すのは NJOY (Fortran) の complex 演算が同じ libcall を踏んだ
+# 場合の保険 (未使用なら archive member は引かれないだけで無害)。
 # libomp.a と omp.h の SDK コピーの理由は x86_64 版のコメント参照
 
+# OPENMP_FLAGS で FindOpenMP の try_compile 検出をバイパスする (理由は x86_64 版のコメント。
+# aarch64 はこの検出が失敗して configure が落ちるのを CI run 29983656072 で実測)
 ENV CC=oa64-clang \
     CXX=oa64-clang++ \
     FC=flang \
@@ -78,4 +91,5 @@ ENV CC=oa64-clang \
     MACOSX_DEPLOYMENT_TARGET=11.0 \
     CMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
     OPENMP_LIB_NAME=omp \
-    OPENMP_LIB=/opt/omp/lib/libomp.a
+    OPENMP_LIB=/opt/omp/lib/libomp.a \
+    OPENMP_FLAGS=-fopenmp
