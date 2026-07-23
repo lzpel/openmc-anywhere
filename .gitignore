@@ -12,3 +12,7 @@ venv-check/
 /lib/
 /lib64/
 __pycache__/
+# hdf5 を submodule 化する前に展開していた tarball の残骸 (235MB / 4922 ファイル)。
+# どこからも参照していないが、未追跡のまま置くと git status / git add が全ファイルを
+# 走査して遅くなるので締め出す。消して構わない。
+/src/hdf5-2.1.1/
