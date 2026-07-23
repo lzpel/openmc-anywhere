@@ -1,0 +1,16 @@
+mhdf の Windows 分岐は MSVC 流の大文字名 <BaseTsd.h> を include するが、mingw-w64 の
+ヘッダは小文字 <basetsd.h>。Windows のファイルシステムは大文字小文字を区別しないため
+MSYS2 ネイティブでは偶然通るが、Linux の mingw-w64 クロス (case-sensitive) では
+fatal error: BaseTsd.h: No such file or directory になる (CI run 29987743934 で実測)。
+小文字は両環境で解決するので小文字に揃える。
+--- a/src/io/mhdf/src/file-handle.h
++++ b/src/io/mhdf/src/file-handle.h
+@@ -17,7 +17,7 @@
+ #define MHDF_FILE_HANDLE_H
+ 
+ #ifdef _WIN32 /* windows */
+-#include <BaseTsd.h>
++#include <basetsd.h>
+ typedef ULONG32 uint32_t;
+ #endif
+ #include "mhdf.h"
