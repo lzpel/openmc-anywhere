@@ -1,0 +1,8 @@
+# openmc-pypi 用 toolchain イメージ (x86_64-unknown-linux-gnu)。
+# manylinux_2_28 は AlmaLinux 8 / glibc 2.28。glibc 2.28+ の任意のディストリに刺さる
+# バイナリが得られる (Python wheel の標準的な可搬性戦略)。
+# イメージには gcc-toolset-14 (gcc/g++/gfortran が PATH 先頭)・cmake・make・git・patch・
+# uv・auditwheel が同梱されており、追加パッケージ無しで makefile が回る
+# (旧 `make linux` が素のイメージで通っていた実測)。
+# ソースは実行時 bind-mount (project 非依存の toolchain イメージ。COPY しない)。
+FROM quay.io/pypa/manylinux_2_28_x86_64

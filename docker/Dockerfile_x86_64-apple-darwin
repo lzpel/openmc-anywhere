@@ -1,0 +1,111 @@
+# openmc-pypi 用 osxcross toolchain イメージ (x86_64-apple-darwin)。実験的。
+# 環境依存の設定 (コンパイラ・SDK・toolchain) はこのイメージの ENV に全部閉じ、
+# makefile は環境変数 (CC/CXX/FC/OTOOL/CMAKE_TOOLCHAIN_FILE/OPENMP_LIB*) を読むだけにする。
+# ソースは実行時 bind-mount (project 非依存の toolchain イメージ。COPY しない)。
+#
+# 構成:
+#   - apt.llvm.org の clang/lld/flang-20: ホスト clang は osxcross のビルドに、
+#     flang は NJOY (Fortran) の darwin クロスに使う (本家 GCC は aarch64-apple-darwin
+#     未対応で gfortran クロスが組めないため flang を採用)。
+#   - osxcross (commit pin): cctools/ld64 + clang wrapper (o64-clang 等) + macOS SDK。
+#   - llvm-project ソースから darwin 向けに flang-rt (Fortran ランタイム。apt の物は
+#     linux 用なのでクロスビルドが必須) と静的 libomp (OpenMC の OpenMP 用) を組む。
+#
+# 注意: macOS SDK の利用は Xcode ライセンス上 Apple 製ハードウェアに限定されており、
+# Linux CI での使用は厳密にはグレー (osxcross 利用プロジェクトの一般的なやり方)。
+# SDK_URL は ARG なので自前ホストの tarball に差し替え可能。
+# flang で NJOY が通らない場合は `ENV WITH_NJOY=0` を足せば njoy 無し wheel になる
+# (fallback もイメージ内に閉じる)。
+FROM ubuntu:24.04
+
+# LLVM 21 が必須: flang-rt (Fortran ランタイムの runtimes ビルド) は 21 で導入された
+# (20.1.8 の tarball には flang-rt/ が無く、LLVM_ENABLE_RUNTIMES=flang-rt が黙って
+# 無視される。実測)。コンパイラ (apt の flang) とランタイムのメジャーを揃える。
+ARG LLVM=21
+ARG LLVM_SRC=21.1.8
+ARG OSXCROSS_REF=28b7b67c937f4c620a7bf1e7b6dbce057bb7691e
+ARG SDK_URL=https://github.com/joseluisq/macosx-sdks/releases/download/14.5/MacOSX14.5.sdk.tar.xz
+
+# ホストツール + osxcross ビルド要件 + apt.llvm.org の clang/lld/flang + uv
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg git make patch file \
+      xz-utils bzip2 cpio zip unzip cmake python3 \
+      libssl-dev liblzma-dev libxml2-dev zlib1g-dev \
+ && curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o /etc/apt/trusted.gpg.d/apt-llvm-org.asc \
+ && echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM} main" > /etc/apt/sources.list.d/llvm.list \
+ && apt-get update && apt-get install -y --no-install-recommends \
+      clang-${LLVM} lld-${LLVM} llvm-${LLVM} flang-${LLVM} \
+ && ln -sf /usr/lib/llvm-${LLVM}/bin/clang   /usr/local/bin/clang \
+ && ln -sf /usr/lib/llvm-${LLVM}/bin/clang++ /usr/local/bin/clang++ \
+ && f=$(find /usr/lib/llvm-${LLVM}/bin -maxdepth 1 -name 'flang*' | head -n1) \
+ && ln -sf "$f" /usr/local/bin/flang \
+ && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+ && rm -rf /var/lib/apt/lists/*
+
+# osxcross: cctools/ld64 + wrapper を SDK からビルド (commit pin で再現性を取る)
+RUN git clone https://github.com/tpoechtrager/osxcross.git /opt/osxcross-src \
+ && git -C /opt/osxcross-src checkout ${OSXCROSS_REF} \
+ && curl -fL -o /opt/osxcross-src/tarballs/$(basename ${SDK_URL}) ${SDK_URL} \
+ && cd /opt/osxcross-src && UNATTENDED=1 TARGET_DIR=/opt/osxcross ./build.sh \
+ && rm -rf /opt/osxcross-src
+
+ENV PATH=/opt/osxcross/bin:$PATH
+
+# toolchain.cmake (cmake >=3.21 は環境変数 CMAKE_TOOLCHAIN_FILE を読む → makefile 無改造で
+# 全 cmake 呼び出しがクロス化する)。flang は osxcross wrapper が無いので --target/-isysroot を
+# Fortran flags で注入し、リンカは ld64.lld (-fuse-ld=lld)。-L/opt/flang-rt/lib で下で組む
+# darwin 用 Fortran ランタイムを見せる。otool は cctools の物へ固定名 symlink を張り
+# ENV OTOOL で makefile の自己完結断言に使わせる。
+RUN SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
+ && P=$(ls /opt/osxcross/bin/x86_64-apple-darwin*-otool | head -n1 | sed 's/-otool$//') && { \
+      echo "set(CMAKE_SYSTEM_NAME Darwin)"; \
+      echo "set(CMAKE_SYSTEM_PROCESSOR x86_64)"; \
+      echo "set(CMAKE_OSX_SYSROOT $SDK)"; \
+      echo "set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)"; \
+      echo "set(CMAKE_C_COMPILER o64-clang)"; \
+      echo "set(CMAKE_CXX_COMPILER o64-clang++)"; \
+      echo "set(CMAKE_Fortran_COMPILER flang)"; \
+      echo "set(CMAKE_Fortran_FLAGS_INIT \"--target=x86_64-apple-macosx11.0 -isysroot $SDK -fuse-ld=lld -L/opt/flang-rt/lib\")"; \
+      echo "# cctools は <triple>- prefix 名しか無く、prefix を推測できない Fortran (flang) の"; \
+      echo "# enable_language が install_name_tool 探索で落ちる (実測) ため全部明示する"; \
+      echo "set(CMAKE_AR $P-ar)"; \
+      echo "set(CMAKE_RANLIB $P-ranlib)"; \
+      echo "set(CMAKE_STRIP $P-strip)"; \
+      echo "set(CMAKE_INSTALL_NAME_TOOL $P-install_name_tool)"; \
+    } > /opt/toolchain.cmake \
+ && cd /opt/osxcross/bin && ln -sf $(ls *-apple-darwin*-otool | head -n1) darwin-otool
+
+# darwin 向け flang-rt (Fortran ランタイム) と静的 libomp を llvm-project ソースから
+# クロスビルド。CMAKE_Fortran_COMPILER_WORKS=ON: コンパイラ検査のテストリンクが
+# flang-rt 自身を要求する鶏卵を断つ (flang-rt ビルドの定石)。
+RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_SRC}/llvm-project-${LLVM_SRC}.src.tar.xz | tar -xJ -C /opt \
+ && cmake -S /opt/llvm-project-${LLVM_SRC}.src/runtimes -B /tmp/flang-rt \
+      -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake -DCMAKE_BUILD_TYPE=Release \
+      -DLLVM_ENABLE_RUNTIMES=flang-rt -DCMAKE_Fortran_COMPILER_WORKS=ON \
+      -DCMAKE_INSTALL_PREFIX=/opt/flang-rt \
+ && cmake --build /tmp/flang-rt -j$(nproc) && cmake --install /tmp/flang-rt \
+ && mkdir -p /opt/flang-rt/lib \
+ && find /opt/flang-rt -name 'libflang_rt*.a' -exec cp -n {} /opt/flang-rt/lib/ \; \
+ && test -f /opt/flang-rt/lib/libflang_rt.runtime.a \
+ && cmake -S /opt/llvm-project-${LLVM_SRC}.src/openmp -B /tmp/omp \
+      -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake -DCMAKE_BUILD_TYPE=Release \
+      -DLIBOMP_ENABLE_SHARED=OFF -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
+      -DCMAKE_INSTALL_PREFIX=/opt/omp \
+ && cmake --build /tmp/omp -j$(nproc) && cmake --install /tmp/omp \
+ && SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
+ && cp /opt/omp/lib/libomp.a $SDK/usr/lib/ \
+ && cp /opt/omp/include/*.h $SDK/usr/include/ \
+ && rm -rf /tmp/flang-rt /tmp/omp /opt/llvm-project-${LLVM_SRC}.src
+# libomp.a と omp.h は SDK にもコピーする: clang の -fopenmp=libomp が暗黙に足す -lomp と
+# #include <omp.h> が追加フラグ無しで解決し、CMake FindOpenMP の try_compile も通る
+# (-L を makefile 側に書かずに済む = 環境設定がイメージに閉じる)
+
+# makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)
+ENV CC=o64-clang \
+    CXX=o64-clang++ \
+    FC=flang \
+    OTOOL=darwin-otool \
+    MACOSX_DEPLOYMENT_TARGET=11.0 \
+    CMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+    OPENMP_LIB_NAME=omp \
+    OPENMP_LIB=/opt/omp/lib/libomp.a
