@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 Satoshi Misumi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+This repository's own build tooling (makefile, build.py, hatch_build.py, the
+patches under src/) is covered by the MIT license above.
+
+Third-party components redistributed in the built wheel keep their own terms:
+
+- OpenMC (openmc-dev/openmc) — MIT
+- HDF5 (HDFGroup/hdf5) — BSD-3-Clause style (HDF Group license)
+- MOAB (fathomteam/moab) — LGPL-3.0
+- DAGMC (svalinn/DAGMC) — BSD-3-Clause
+- NJOY2016 (njoy/NJOY2016) — LANL BSD-3-Clause style; the notice is shipped in
+  the wheel's dist-info as NJOY2016-LICENSE
+
+Note that MOAB is LGPL-3.0 and is *statically* linked into the `openmc`
+executable and into `libopenmc`. Redistributing that combination carries the
+LGPL-3.0 obligations for a Combined Work (section 4): the LGPL notice must be
+conveyed, and recipients must be given the means to relink the work against a
+modified MOAB. Anyone redistributing these wheels should satisfy those terms.

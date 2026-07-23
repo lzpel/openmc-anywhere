@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""openmc-pypi wheel の end-to-end 検証。wheel をインストールした venv で実行する。
+"""openmc-anywhere wheel の end-to-end 検証。wheel をインストールした venv で実行する。
 
 4経路を通す:
   (a) subprocess: Model.run() が PATH 上の openmc(.exe) を起動し statepoint を読む
@@ -9,7 +9,7 @@
       reconr/broadr/heatr×2/gaspr/purr/acer をエンドツーエンドで通す)
 
 OPENMC_CROSS_SECTIONS が設定済みであること。生成物 (xml, statepoint 等) はカレントに落ちるので
-使い捨てディレクトリで実行する (makefile の check がそうしている)。
+使い捨てディレクトリで実行する (build.py の check がそうしている)。
 """
 
 import argparse

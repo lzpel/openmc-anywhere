@@ -7,4 +7,4 @@ index c204929c8..55d2674ff 100644
  
  
 -__version__ = importlib.metadata.version("openmc")
-+__version__ = importlib.metadata.version("openmc-pypi")
++__version__ = importlib.metadata.version("openmc-anywhere")

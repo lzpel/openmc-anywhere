@@ -1,6 +1,6 @@
-# openmc-pypi 用 osxcross toolchain イメージ (x86_64-apple-darwin)。実験的。
+# openmc-anywhere 用 osxcross toolchain イメージ (x86_64-apple-darwin)。実験的。
 # 環境依存の設定 (コンパイラ・SDK・toolchain) はこのイメージの ENV に全部閉じ、
-# makefile は環境変数 (CC/CXX/FC/OTOOL/CMAKE_TOOLCHAIN_FILE/OPENMP_LIB*) を読むだけにする。
+# build.py は環境変数 (CC/CXX/FC/OTOOL/CMAKE_TOOLCHAIN_FILE/OPENMP_LIB*) を読むだけにする。
 # ソースは実行時 bind-mount (project 非依存の toolchain イメージ。COPY しない)。
 #
 # 構成:
@@ -51,11 +51,11 @@ RUN git clone https://github.com/tpoechtrager/osxcross.git /opt/osxcross-src \
 
 ENV PATH=/opt/osxcross/bin:$PATH
 
-# toolchain.cmake (cmake >=3.21 は環境変数 CMAKE_TOOLCHAIN_FILE を読む → makefile 無改造で
+# toolchain.cmake (cmake >=3.21 は環境変数 CMAKE_TOOLCHAIN_FILE を読む → build.py 無改造で
 # 全 cmake 呼び出しがクロス化する)。flang は osxcross wrapper が無いので --target/-isysroot を
 # Fortran flags で注入し、リンカは ld64.lld (-fuse-ld=lld)。-L/opt/flang-rt/lib で下で組む
 # darwin 用 Fortran ランタイムを見せる。otool は cctools の物へ固定名 symlink を張り
-# ENV OTOOL で makefile の自己完結断言に使わせる。
+# ENV OTOOL で build.py の自己完結断言に使わせる。
 RUN SDK=$(ls -d /opt/osxcross/SDK/MacOSX*.sdk | head -n1) \
  && P=$(ls /opt/osxcross/bin/x86_64-apple-darwin*-otool | head -n1 | sed 's/-otool$//') && { \
       echo "set(CMAKE_SYSTEM_NAME Darwin)"; \
@@ -103,13 +103,13 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
  && rm -rf /tmp/flang-rt /tmp/omp /opt/llvm-project-${LLVM_SRC}.src
 # libomp.a と omp.h は SDK にもコピーする: clang の -fopenmp=libomp が暗黙に足す -lomp と
 # #include <omp.h> が追加フラグ無しで解決し、CMake FindOpenMP の try_compile も通る
-# (-L を makefile 側に書かずに済む = 環境設定がイメージに閉じる)
+# (-L を build.py 側に書かずに済む = 環境設定がイメージに閉じる)
 # compiler-rt builtins の同梱: apt の clang (linux 用) は darwin 向け libclang_rt.osx.a を
 # 持たず、complex 除算の libcall __div{d,s}c3 が解決できない (aarch64 の openmc リンクで
 # 実測。x86_64 は現状踏まないが、コード生成次第で踏み得るので対称に同梱する)。詳細は
 # aarch64 版のコメント参照。
 
-# makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)。
+# build.py が読む環境契約 (これで環境依存が全部イメージに閉じる)。
 # OPENMP_FLAGS: FindOpenMP は FLAGS と LIB_NAMES の両方が事前設定のときだけ try_compile
 # 検出をスキップする。osxcross では検出が不安定 (aarch64 で失敗を実測) なので明示して
 # バイパスする。clang の既定 OpenMP ランタイムは libomp なので -fopenmp で挙動は変わらない。

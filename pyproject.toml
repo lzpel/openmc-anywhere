@@ -1,4 +1,4 @@
-# 配布名は openmc-pypi、import 名は上流そのままの openmc (cadquery-ocp が OCP を提供するのと
+# 配布名は openmc-anywhere、import 名は上流そのままの openmc (cadquery-ocp が OCP を提供するのと
 # 同じ関係)。上流の pyproject.toml は使わない: setuptools-scm の dynamic version が submodule の
 # git メタデータ (タグ) を要求するのに対し、こちらは静的に固定できるため。依存は上流
 # src/openmc/pyproject.toml の dependencies を verbatim に写す。
@@ -7,7 +7,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "openmc-pypi"
+name = "openmc-anywhere"
 # 上流 v0.15.3-214-g54b661d39 (submodule の pin) に対応。submodule を進めたら手で更新する
 version = "0.15.3.post214"
 description = "OpenMC Monte Carlo particle transport with bundled binaries (openmc executable + libopenmc shared library)"
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/lzpel/openmc-pypi"
+Repository = "https://github.com/lzpel/openmc-anywhere"
 Upstream = "https://github.com/openmc-dev/openmc"
 
 [tool.hatch.build.targets.wheel]
