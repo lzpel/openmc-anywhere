@@ -1,0 +1,86 @@
+# prebuilt ブランチへの push で全 TARGET の wheel をビルドし、GitHub Release にまとめて
+# 公開する (github.com/lzpel/cadrum の prebuilt パイプラインの方式)。
+#
+# - docker cross (linux 2 arch + darwin 2 arch): `make cross-<triple>` が
+#   docker/Dockerfile_<triple> を組んで中で wheel を作る。環境依存はイメージに閉じる。
+#   aarch64-linux は ubuntu-24.04-arm ランナーでネイティブ実行 (QEMU 回避)。
+#   darwin は osxcross クロスなので ubuntu ランナーで良い。
+# - windows はホスト実証済みの MSYS2/MinGW 構成をそのまま CI 化 (docker 無し)。
+# - release ジョブ: 全 wheel を Release v<version> (pyproject.toml) に添付。既存タグなら
+#   asset を差し替える (softprops の挙動。CI 再実行で同版を更新できる。手動 make release の
+#   「タグ既存なら落ちる」とは意図的に違う)。
+# - 注意: デフォルト GITHUB_TOKEN で作った Release は release:published イベントを
+#   発火しない (GitHub の再帰防止仕様) ため、pages.yml は workflow_dispatch で明示起動する。
+name: prebuilt
+on:
+  push:
+    branches: [prebuilt]
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-latest }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm }
+          - { target: x86_64-apple-darwin,       os: ubuntu-latest }
+          - { target: aarch64-apple-darwin,      os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      # submodule 指定は不要: make src がコンテナ内で update --init --recursive する
+      - uses: actions/checkout@v4
+      - run: make cross-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*.whl
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            make
+            git
+            patch
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-uv
+      - run: make wheel TARGET=x86_64-pc-windows-gnu
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-x86_64-pc-windows-gnu
+          path: dist/*.whl
+  release:
+    needs: [build, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Release 作成
+      actions: write    # pages.yml の workflow_dispatch
+    steps:
+      - uses: actions/checkout@v4   # pyproject.toml の version を読むだけ
+      - id: v
+        run: echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: v${{ steps.v.outputs.version }}
+          body: openmc + libopenmc + njoy bundled wheels
+          files: dist/*.whl
+      # pages.yml は default ブランチの定義が起動される (-r 指定なし) ので、
+      # prebuilt ブランチからの起動でも正しい index 生成が走る
+      - name: trigger pages index rebuild
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY"
