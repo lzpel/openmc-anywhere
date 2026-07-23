@@ -3,11 +3,6 @@ prefix/
 out/
 dist/
 venv-check/
-# 取得ソース (submodule は src/openmc のみ。他は makefile が clone/展開する)
-src/hdf5-*/
-src/moab/
-src/dagmc/
-src/njoy/
 # njoy をカレントで直接叩くと出力リスティング output を残す
 /output
 # ビルド副産物 (MOAB が repo 直下に moab.make を落とす。__pycache__ は hatch_build.py)
