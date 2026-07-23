@@ -71,6 +71,8 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
  && rm -rf /tmp/flang-rt /tmp/omp /opt/llvm-project-${LLVM_SRC}.src
 # libomp.a と omp.h の SDK コピーの理由は x86_64 版のコメント参照
 
+# OPENMP_FLAGS で FindOpenMP の try_compile 検出をバイパスする (理由は x86_64 版のコメント。
+# aarch64 はこの検出が失敗して configure が落ちるのを CI run 29983656072 で実測)
 ENV CC=oa64-clang \
     CXX=oa64-clang++ \
     FC=flang \
@@ -78,4 +80,5 @@ ENV CC=oa64-clang \
     MACOSX_DEPLOYMENT_TARGET=11.0 \
     CMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
     OPENMP_LIB_NAME=omp \
-    OPENMP_LIB=/opt/omp/lib/libomp.a
+    OPENMP_LIB=/opt/omp/lib/libomp.a \
+    OPENMP_FLAGS=-fopenmp

@@ -100,7 +100,10 @@ RUN curl -fL https://github.com/llvm/llvm-project/releases/download/llvmorg-${LL
 # #include <omp.h> が追加フラグ無しで解決し、CMake FindOpenMP の try_compile も通る
 # (-L を makefile 側に書かずに済む = 環境設定がイメージに閉じる)
 
-# makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)
+# makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)。
+# OPENMP_FLAGS: FindOpenMP は FLAGS と LIB_NAMES の両方が事前設定のときだけ try_compile
+# 検出をスキップする。osxcross では検出が不安定 (aarch64 で失敗を実測) なので明示して
+# バイパスする。clang の既定 OpenMP ランタイムは libomp なので -fopenmp で挙動は変わらない。
 ENV CC=o64-clang \
     CXX=o64-clang++ \
     FC=flang \
@@ -108,4 +111,5 @@ ENV CC=o64-clang \
     MACOSX_DEPLOYMENT_TARGET=11.0 \
     CMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
     OPENMP_LIB_NAME=omp \
-    OPENMP_LIB=/opt/omp/lib/libomp.a
+    OPENMP_LIB=/opt/omp/lib/libomp.a \
+    OPENMP_FLAGS=-fopenmp

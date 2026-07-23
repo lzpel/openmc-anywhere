@@ -7,6 +7,7 @@
 #   make check           # wheel を venv に入れて end-to-end 検証 (check.py の3経路。Windows ホスト用)
 #   make cross-<triple>  # docker/Dockerfile_<triple> の toolchain イメージ内で wheel をビルド
 #                        #   (x86_64|aarch64)-unknown-linux-gnu / (x86_64|aarch64)-apple-darwin
+#                        #   / x86_64-pc-windows-gnu
 #   make check-linux     # 素の python:3.12 コンテナで Linux wheel を検証 (可搬性の証明)
 #   make clean           # build/ prefix/ out/ dist/ venv-check/ を削除
 #
@@ -285,6 +286,14 @@ OPENMC_CMAKE = $(CMAKE_COMMON) \
 # auditwheel repair に同梱させる。darwin のオブジェクトは常に PIC なので畳める見込み。
 OPENMP_STATIC = -DOpenMP_CXX_LIB_NAMES=$(OPENMP_LIB_NAME) -DOpenMP_C_LIB_NAMES=$(OPENMP_LIB_NAME) \
 	  -DOpenMP_$(OPENMP_LIB_NAME)_LIBRARY="$(OPENMP_LIB)"
+# FindOpenMP は OpenMP_<lang>_FLAGS と _LIB_NAMES の両方が事前設定のときだけ try_compile
+# 検出をスキップする。上は LIB_NAMES しか渡さないので検出が走り、osxcross の
+# aarch64-apple-darwin では検出が失敗して configure ごと落ちる (CI run 29983656072 で実測。
+# x86_64 は偶然通る)。darwin の docker ENV が OPENMP_FLAGS=-fopenmp を注入して両方を
+# 揃え、検出を丸ごとバイパスする。未定義の環境 (linux / windows) は従来通り検出に任せる。
+ifdef OPENMP_FLAGS
+  OPENMP_STATIC += -DOpenMP_C_FLAGS="$(OPENMP_FLAGS)" -DOpenMP_CXX_FLAGS="$(OPENMP_FLAGS)"
+endif
 ifeq ($(OSNAME),windows)
   OPENMP_ARGS_LIB = $(OPENMP_STATIC)
   SHLIB_LDFLAGS   = $(RUNTIME_STATIC)
