@@ -47,15 +47,32 @@ dist-info に `NJOY2016-LICENSE` として同梱している。
 ## ビルド
 
 ```
-make            # このOS (Windows/MinGW) の wheel。パスを stdout に印字
-make check      # venv に入れて end-to-end 検証 (subprocess / openmc.lib / DAGMC の3経路)
-make linux      # Docker の manylinux_2_28 コンテナで Linux wheel
-make check-linux# 素の python:3.12 コンテナで検証 (可搬性の証明)
+make                 # このホスト (Windows/MinGW) の wheel。パスを stdout に印字
+make check           # venv に入れて end-to-end 検証 (subprocess / openmc.lib / DAGMC の3経路)
+make cross-<triple>  # docker/Dockerfile_<triple> の toolchain イメージ内で wheel をビルド
+                     #   (x86_64|aarch64)-unknown-linux-gnu … manylinux_2_28
+                     #   (x86_64|aarch64)-apple-darwin      … osxcross クロス (実験的)
+make check-linux     # 素の python:3.12 コンテナで検証 (可搬性の証明)
 ```
 
 Windows は素の MinGW-w64 (gcc) + cmake + make + uv で成立する。ビルド手順は
 mhd-tbr-stell/sandbox-openmc-source (MinGW ネイティブビルドの実証サンドボックス) からの移植で、
 HDF5/MOAB/DAGMC のバージョンピンと CMake フラグの根拠はそちらのコメントに詳しい。
+
+環境依存の設定 (コンパイラ名・SDK・toolchain) は makefile に書かず
+docker/Dockerfile_<triple> の ENV に閉じる。makefile は環境変数 (CC/CXX/FC/OTOOL/
+CMAKE_TOOLCHAIN_FILE/OPENMP_LIB など) を尊重し、無ければホスト向けデフォルトを使う。
+darwin の Fortran (NJOY) は LLVM flang のクロスで、通らない環境では `WITH_NJOY=0` で
+njoy 無し wheel に逃げられる。
+
+## CI/CD (prebuilt ブランチ)
+
+`prebuilt` ブランチへ push すると .github/workflows/prebuilt.yml が全5 TARGET
+(linux x86_64/aarch64、darwin x86_64/aarch64、windows x86_64) の wheel をビルドし、
+Release v<version> (pyproject.toml の version) に asset としてまとめて添付する。
+既存の pages workflow が PEP 503 simple index を再生成する (GITHUB_TOKEN で作った
+Release は release イベントを発火しないため、workflow_dispatch で明示起動している)。
+手動の `make release` は逃げ道として残っている。
 
 ## 設計判断と根拠
 
@@ -81,15 +98,24 @@ HDF5/MOAB/DAGMC のバージョンピンと CMake フラグの根拠はそちら
   `...libhdf5.a ... libMOAB.a` の順になり、単一パスの ld では MOAB の mhdf が使う deprecated
   API (H5Aopen_name 等) だけ未解決になるため、`CMAKE_CXX_STANDARD_LIBRARIES` で HDF5 を
   リンク行末尾に再掲して閉じる。
-- **上流は submodule + パッチ**: `src/openmc` は openmc-dev/openmc の pin
-  (v0.15.3-214-g54b661d39、M_PI 修正 [openmc#4023] 込み)。パッチは `patches/openmc/`:
-  - `static-lib.patch` — `option(OPENMC_STATIC_LIB)` を追加 (exe 用静的 lib と DLL/so を
+- **上流は全部 submodule + パッチ**: `src/openmc` (openmc-dev/openmc の pin。
+  v0.15.3-214-g54b661d39、M_PI 修正 [openmc#4023] 込み) に加え、`src/hdf5` (2.1.1) /
+  `src/moab` (5.6.0) / `src/dagmc` (v3.2.4) / `src/njoy` (2016.79) も submodule
+  (openmc だけは full clone: タグが CMake の GetVersionFromGit に必要。moab は配布 tarball
+  が壊れているため git 必須)。パッチは `src/<component>-<name>.patch` にフラットに置き、
+  ファイル名の最初の `-` より前が当て先 submodule:
+  - `openmc-static-lib.patch` — `option(OPENMC_STATIC_LIB)` を追加 (exe 用静的 lib と DLL/so を
     1つのソースツリーから作り分ける)
-  - `dagmc-static.patch` — dagmc-shared ではなく dagmc-static をリンク
-  - `lib-dll-suffix.patch` — `openmc.lib` のロード対象に win32 → `libopenmc.dll` を追加
+  - `openmc-dagmc-static.patch` — dagmc-shared ではなく dagmc-static をリンク
+  - `openmc-lib-dll-suffix.patch` — `openmc.lib` のロード対象に win32 → `libopenmc.dll` を追加
     (上流は darwin/その他の2分岐しか無い)
-  - `dist-name.patch` — `openmc/__init__.py` の `importlib.metadata.version("openmc")` を
+  - `openmc-dist-name.patch` — `openmc/__init__.py` の `importlib.metadata.version("openmc")` を
     配布名 `openmc-pypi` に合わせる (これを怠ると import 自体が PackageNotFoundError で落ちる)
+  - `moab-skip-tools.patch` / `dagmc-static-hdf5.patch` — 各ビルドの静的リンク調整
+- **共有 lib は out/<triple>/ 経由で wheel に入る**: 上流 CMake の POST_BUILD は
+  ソースツリー openmc/lib/ にコピーするが、そこは全 TARGET 共有で同 OS の 2 arch
+  (linux の x86_64/aarch64 など) が同名衝突する。makefile がビルド直後に
+  out/<triple>/ へ退避し、hatch_build.py の force_include はそちらを拾う。
 - **pyproject は自前の thin 定義** (hatchling): 上流 pyproject は setuptools-scm の dynamic
   version が submodule の git メタデータに依存するため使わない。version はここで静的に固定し、
   submodule を進めるときに手で上げる。依存リストは上流から verbatim。
@@ -133,3 +159,6 @@ HDF5/MOAB/DAGMC のバージョンピンと CMake フラグの根拠はそちら
   保証しない。通常の使い方 (import して使い続ける) では問題ない。
 - MPI / libMesh / UWUW は無効。共有メモリ並列 (OpenMP) は有効。
 - 断面積データ・depletion chain は同梱しない。
+- macOS wheel (osxcross + flang クロス) は実験的で、実機 macOS での end-to-end 検証は
+  未実施。macOS SDK の Linux 上での利用は Xcode ライセンス上グレー (SDK_URL は
+  Dockerfile の ARG で差し替え可能)。
