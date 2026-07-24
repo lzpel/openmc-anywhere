@@ -17,9 +17,11 @@ CXX := $(if $(filter default,$(origin CXX)),g++,$(CXX))
 FC := $(if $(filter default,$(origin FC)),gfortran,$(FC))
 OTOOL ?= otool
 
-BUILD := $(CURDIR)/build/$(TARGET)
-PREFIX := $(CURDIR)/prefix/$(TARGET)
-OUT := $(CURDIR)/out/$(TARGET)
+BUILD := build/$(TARGET)
+OUT := out/$(TARGET)
+# ここだけ絶対パス。CMAKE_CXX_STANDARD_LIBRARIES (LINK_TAIL) に書いた .a は cmake が
+# 相対のままリンク行へ通し、リンクは cwd=ビルドディレクトリで走るので解決できない (実測)。
+PREFIX := $(abspath prefix/$(TARGET))
 
 SOEXT_windows := dll
 SOEXT_darwin := dylib
@@ -81,12 +83,12 @@ OPENMC_CMAKE := $(CMAKE_COMMON) -DHDF5_ROOT=$(PREFIX) -DHDF5_PREFER_PARALLEL=FAL
 
 # 上流 CMake の POST_BUILD がソースツリーに落とす場所は全 TARGET 共有で同 OS の 2 arch が
 # 同名衝突するため、per-target の out/ へ退避する。wheel (hatch_build.py) はそちらを拾う。
-SHLIB := $(CURDIR)/src/openmc/openmc/lib/libopenmc.$(SOEXT)
+SHLIB := src/openmc/openmc/lib/libopenmc.$(SOEXT)
 SHLIB_OUT := $(OUT)/libopenmc.$(SOEXT)
 OPENMC_EXE := $(OUT)/openmc$(EXE)
 NJOY_EXE := $(OUT)/njoy$(EXE)
-WHEEL_GLOB := $(CURDIR)/dist/openmc_anywhere-*-py3-none-$(PLAT).whl
-VENV_BIN := $(CURDIR)/venv-check/$(if $(filter windows,$(OS)),Scripts,bin)
+WHEEL_GLOB := dist/openmc_anywhere-*-py3-none-$(PLAT).whl
+VENV_BIN := venv-check/$(if $(filter windows,$(OS)),Scripts,bin)
 
 # ---- 自己完結の断言。許可リストに載らない動的依存が1つでも残っていたら失敗させる ----
 DEPS_linux = ldd $1 | grep '=>' | sed 's/=>.*//' | tr -d ' \t'
@@ -113,34 +115,32 @@ ASSERT_ALL = $(call assert,$(SHLIB_OUT),lib); $(call assert,$(OPENMC_EXE),exe); 
 
 # 上流は全部 submodule。openmc は full clone (タグが入り CMake の GetVersionFromGit が動く。
 # shallow だと openmc --version が 0.0.0 になる)。パッチの当て先はファイル名の最初の '-' より前。
-# 適用済みなら黙って飛ばす (-R --dry-run が通る = すでに当たっている、という判定)。
+# --force が submodule の作業ツリーを毎回 pristine に戻す (実測) ので、適用済み判定は要らない。
+# その代わり src/ 以下を手で編集しても次の source で消える (パッチを足すのが正規の手順)。
+# sort: 同じ submodule に複数当たるものがあるので適用順を固定する。
 # .PHONY は使わないので段名は直下の実体と衝突させない (src/ があるため段名は src ではなく source)。
 source:
-	git submodule update --init --recursive
-	for p in $(sort $(wildcard $(CURDIR)/src/*.patch)); do \
-	  n=$$(basename $$p .patch); d=$(CURDIR)/src/$${n%%-*}; \
-	  if patch -p1 -d $$d -R --dry-run -s -f < $$p; then echo "$$n: already applied"; \
-	  else patch -p1 -d $$d < $$p && echo "$$n: applied"; fi; \
-	done
+	git submodule update --init --recursive --force
+	find src -maxdepth 1 -name '*.patch' | sort | xargs -IX sh -c 'patch -p1 -d src/$$(basename X | cut -d- -f1) < X'
 
 # 静的 (BUILD_SHARED_LIBS=OFF) にして Windows の DLL シンボル export 問題を丸ごと回避する。
 # OpenMC は C API と HL のみ使うので C++/Fortran/tools は全部切る。
 hdf5: source
-	cmake -S $(CURDIR)/src/hdf5 -B $(BUILD)/hdf5 $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF -DHDF5_ENABLE_THREADSAFE=OFF -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DHDF5_ENABLE_ZLIB_SUPPORT=OFF
+	cmake -S src/hdf5 -B $(BUILD)/hdf5 $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF -DHDF5_ENABLE_THREADSAFE=OFF -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DHDF5_ENABLE_ZLIB_SUPPORT=OFF
 	cmake --build $(BUILD)/hdf5 -j $(JOBS)
 	cmake --install $(BUILD)/hdf5
 
 # .h5m は MOAB のファイル形式そのもので DAGMC はその上の薄い層。静的にするのが肝: 共有だと
 # MSVC 構文のフラグ (/DMOAB_DLL) が GCC に渡り落ちる。既定 ON で落ちるものは明示的に切る。
 moab: hdf5
-	cmake -S $(CURDIR)/src/moab -B $(BUILD)/moab $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DENABLE_HDF5=ON -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DENABLE_BLASLAPACK=OFF -DENABLE_FORTRAN=OFF -DENABLE_TESTING=OFF -DENABLE_PYMOAB=OFF -DENABLE_NETCDF=OFF -DENABLE_MPI=OFF -DENABLE_METIS=OFF -DENABLE_ZOLTAN=OFF -DENABLE_PARMETIS=OFF -DENABLE_TEMPESTREMAP=OFF -DENABLE_CGNS=OFF -DENABLE_CPM=OFF
+	cmake -S src/moab -B $(BUILD)/moab $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DENABLE_HDF5=ON -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DENABLE_BLASLAPACK=OFF -DENABLE_FORTRAN=OFF -DENABLE_TESTING=OFF -DENABLE_PYMOAB=OFF -DENABLE_NETCDF=OFF -DENABLE_MPI=OFF -DENABLE_METIS=OFF -DENABLE_ZOLTAN=OFF -DENABLE_PARMETIS=OFF -DENABLE_TEMPESTREMAP=OFF -DENABLE_CGNS=OFF -DENABLE_CPM=OFF
 	cmake --build $(BUILD)/moab -j $(JOBS)
 	cmake --install $(BUILD)/moab
 
 # UWUW と TALLY は既定 ON だが OpenMC は使わない (UWUW は PyNE を引き込むので特に切る)。
 # DAGMCConfig.cmake は install prefix を焼き込むので最終位置に直接入れる。
 dagmc: moab
-	cmake -S $(CURDIR)/src/dagmc -B $(BUILD)/dagmc $(CMAKE_COMMON) -DMOAB_DIR=$(PREFIX) -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_UWUW=OFF -DBUILD_TALLY=OFF -DBUILD_BUILD_OBB=OFF -DBUILD_MAKE_WATERTIGHT=OFF -DBUILD_OVERLAP_CHECK=OFF -DBUILD_TESTS=OFF -DBUILD_CI_TESTS=OFF -DBUILD_EXE=OFF -DBUILD_STATIC_EXE=OFF -DBUILD_RPATH=OFF -DDOUBLE_DOWN=OFF -DPULL_INSTALL_MOAB=OFF
+	cmake -S src/dagmc -B $(BUILD)/dagmc $(CMAKE_COMMON) -DMOAB_DIR=$(PREFIX) -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_UWUW=OFF -DBUILD_TALLY=OFF -DBUILD_BUILD_OBB=OFF -DBUILD_MAKE_WATERTIGHT=OFF -DBUILD_OVERLAP_CHECK=OFF -DBUILD_TESTS=OFF -DBUILD_CI_TESTS=OFF -DBUILD_EXE=OFF -DBUILD_STATIC_EXE=OFF -DBUILD_RPATH=OFF -DDOUBLE_DOWN=OFF -DPULL_INSTALL_MOAB=OFF
 	cmake --build $(BUILD)/dagmc -j $(JOBS)
 	cmake --install $(BUILD)/dagmc
 
@@ -150,7 +150,7 @@ dagmc: moab
 # Python3_EXECUTABLE: ホストの python は Microsoft Store のスタブなので uv 管理のものを名指す
 # (Windows ホストでは uv がバックスラッシュで返すので cmake に渡す前にスラッシュへ直す)。
 njoy: source
-	cmake -S $(CURDIR)/src/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=$(FC) -DPython3_EXECUTABLE=$(subst \,/,$(shell uv python find)) "-DCMAKE_EXE_LINKER_FLAGS=$(NJOY_STATIC)"
+	cmake -S src/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=$(FC) -DPython3_EXECUTABLE=$(subst \,/,$(shell uv python find)) "-DCMAKE_EXE_LINKER_FLAGS=$(NJOY_STATIC)"
 	cmake --build $(BUILD)/njoy -j $(JOBS) --target njoy_executable
 	mkdir -p $(OUT)
 	cp $(BUILD)/njoy/njoy$(EXE) $(NJOY_EXE)
@@ -159,7 +159,7 @@ njoy: source
 # DLL と exe を同じビルドでリンクすると MinGW の全シンボル自動エクスポートで _Unwind_Resume が
 # exe 側の静的 libgcc_eh.a と multiple definition になる (実測) ので、ビルドディレクトリごと分ける。
 openmc-exe: hdf5 dagmc
-	cmake -S $(CURDIR)/src/openmc -B $(BUILD)/openmc-exe $(OPENMC_CMAKE) $(OPENMP_STATIC) -DOPENMC_STATIC_LIB=ON "-DCMAKE_EXE_LINKER_FLAGS=$(RUNTIME_STATIC)"
+	cmake -S src/openmc -B $(BUILD)/openmc-exe $(OPENMC_CMAKE) $(OPENMP_STATIC) -DOPENMC_STATIC_LIB=ON "-DCMAKE_EXE_LINKER_FLAGS=$(RUNTIME_STATIC)"
 	cmake --build $(BUILD)/openmc-exe -j $(JOBS)
 	cmake --install $(BUILD)/openmc-exe
 	mkdir -p $(OUT)
@@ -175,7 +175,7 @@ LDFLAGS_SHARED_linux := -Wl,--exclude-libs,ALL
 LDFLAGS_SHARED = $(strip $(RUNTIME_STATIC) $(LDFLAGS_SHARED_$(OS)))
 
 openmc-lib: hdf5 dagmc
-	cmake -S $(CURDIR)/src/openmc -B $(BUILD)/openmc-lib $(OPENMC_CMAKE) $(OPENMP_SHARED) "-DCMAKE_SHARED_LINKER_FLAGS=$(LDFLAGS_SHARED)"
+	cmake -S src/openmc -B $(BUILD)/openmc-lib $(OPENMC_CMAKE) $(OPENMP_SHARED) "-DCMAKE_SHARED_LINKER_FLAGS=$(LDFLAGS_SHARED)"
 	cmake --build $(BUILD)/openmc-lib -j $(JOBS) --target libopenmc
 	test -f $(SHLIB)
 	mkdir -p $(OUT)
@@ -187,7 +187,7 @@ openmc-lib: hdf5 dagmc
 wheel: openmc-exe openmc-lib njoy
 	OPENMC_ANYWHERE_PLAT=$(PLAT_BUILD) OPENMC_ANYWHERE_OUT=out/$(TARGET) OPENMC_ANYWHERE_SOEXT=$(SOEXT) OPENMC_ANYWHERE_NJOY=$(NJOY_EXE) uv build --wheel --out-dir dist
 	$(if $(filter windows,$(OS)),true,$(ASSERT_ALL))
-	$(if $(filter linux,$(OS)),for w in $(CURDIR)/dist/openmc_anywhere-*-py3-none-$(PLAT_BUILD).whl; do auditwheel repair --plat $(PLAT) -w dist $$w && rm $$w; done,true)
+	$(if $(filter linux,$(OS)),for w in dist/openmc_anywhere-*-py3-none-$(PLAT_BUILD).whl; do auditwheel repair --plat $(PLAT) -w dist $$w && rm $$w; done,true)
 	ls -1 $(WHEEL_GLOB) | tail -1
 
 path: ## 完成 wheel のパスを stdout に出す (ビルドしない)
@@ -196,16 +196,19 @@ path: ## 完成 wheel のパスを stdout に出す (ビルドしない)
 # windows の断言2つ: DLL の import がシステム DLL のみ (自己完結の証明) と、openmc_init を
 # エクスポート (ctypes が読める形の証明)。PATH に venv の bin を前置するのが肝 — python を直接
 # 叩くだけでは PATH に乗らず、上流 executor.py の literal 'openmc' 解決が失敗する。
-# cygpath: Git Bash から native python.exe を起こすと MSYS が PATH を Windows 形式へ変換するが、
-# `C:/...` を ':' で連結したものは変換に失敗して前置が丸ごと消える (実測)。MSYS 形式で渡す。
-# cygpath の無い環境 (docker の linux/darwin) はそのままで正しいのでフォールバックする。
+# check.py の生成物を捨てるため使い捨てディレクトリへ cd するので、そこから先だけ絶対パスが要る。
+# しかも PATH と引数で必要な形式が違う (Windows ホストのみ。実測):
+#   PATH は MSYS 形式 ($OLDPWD = /c/...)。`C:/...` を ':' で連結すると MSYS の PATH 変換が
+#   失敗して前置が丸ごと消え、shutil.which('openmc') が None になる。
+#   引数は Windows 形式 ($(abspath))。1行目の MSYS_NO_PATHCONV=1 が引数のパス変換を止めて
+#   いるので、/c/... を渡すと native python が C:\c\... と解釈して開けない。
 check:
 	$(if $(filter windows,$(OS)),$(call assert,$(SHLIB_OUT),lib); $(call assert,$(NJOY_EXE),njoy); objdump -p $(SHLIB_OUT) | grep -q openmc_init,true)
-	uv venv $(CURDIR)/venv-check --python 3.12 --allow-existing
-	uv pip install --python $(CURDIR)/venv-check --reinstall $$(ls -1 $(WHEEL_GLOB) | tail -1)
+	uv venv venv-check --python 3.12 --allow-existing
+	uv pip install --python venv-check --reinstall $$(ls -1 $(WHEEL_GLOB) | tail -1)
 	rm -rf $(BUILD)/check-run
 	mkdir -p $(BUILD)/check-run
-	cd $(BUILD)/check-run && PATH="$$(cygpath -u $(VENV_BIN) 2>/dev/null || echo $(VENV_BIN)):$$PATH" $(VENV_BIN)/python$(EXE) $(CURDIR)/check.py $(CURDIR)/src/openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m
+	cd $(BUILD)/check-run && PATH="$$OLDPWD/$(VENV_BIN):$$PATH" $$OLDPWD/$(VENV_BIN)/python$(EXE) $(abspath check.py) $(abspath src/openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m)
 ## B
 cross-%: ## docker/Dockerfile_<triple> の toolchain イメージ内で wheel をビルド
 	docker build -f docker/Dockerfile_$* -t cross-$* .
@@ -215,7 +218,7 @@ cross-%: ## docker/Dockerfile_<triple> の toolchain イメージ内で wheel �
 check: ## ローカル検証 (核データ不要) e.g. make cross-x86_64-pc-windows-gnu && make check
 
 clean: ## ビルド成果物を削除する
-	rm -rf $(CURDIR)/build $(CURDIR)/prefix $(CURDIR)/out dist venv-check
+	rm -rf build prefix out dist venv-check
 
 help: ## ヘルプを表示する
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
