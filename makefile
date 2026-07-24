@@ -202,7 +202,7 @@ path: ## 完成 wheel のパスを stdout に出す (ビルドしない)
 #   失敗して前置が丸ごと消え、shutil.which('openmc') が None になる。
 #   引数は Windows 形式 ($(abspath))。1行目の MSYS_NO_PATHCONV=1 が引数のパス変換を止めて
 #   いるので、/c/... を渡すと native python が C:\c\... と解釈して開けない。
-check:
+check: ## ローカル検証 (核データ不要) e.g. make cross-x86_64-pc-windows-gnu && make check
 	$(if $(filter windows,$(OS)),$(call assert,$(SHLIB_OUT),lib); $(call assert,$(NJOY_EXE),njoy); objdump -p $(SHLIB_OUT) | grep -q openmc_init,true)
 	uv venv venv-check --python 3.12 --allow-existing
 	uv pip install --python venv-check --reinstall $$(ls -1 $(WHEEL_GLOB) | tail -1)
@@ -214,8 +214,6 @@ cross-%: ## docker/Dockerfile_<triple> の toolchain イメージ内で wheel �
 	docker build -f docker/Dockerfile_$* -t cross-$* .
 	docker run --rm -v $(CURDIR):/io -w /io cross-$* bash -c "git config --global --add safe.directory '*' && make wheel TARGET=$*"
 	$(MAKE) --no-print-directory path TARGET=$*
-
-check: ## ローカル検証 (核データ不要) e.g. make cross-x86_64-pc-windows-gnu && make check
 
 clean: ## ビルド成果物を削除する
 	rm -rf build prefix out dist venv-check
