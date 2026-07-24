@@ -22,9 +22,9 @@ make cross-<triple>  # docker/Dockerfile_<triple> の toolchain イメージ内�
                      #   (x86_64|aarch64)-unknown-linux-gnu … manylinux_2_28
                      #   (x86_64|aarch64)-apple-darwin      … osxcross クロス (実験的)
                      #   x86_64-pc-windows-gnu              … mingw-w64 クロス
-make check-linux     # 素の python:3.12 コンテナで Linux wheel を検証 (可搬性の証明)
-make check           # cross で作った wheel をホストの venv に入れて end-to-end 検証
-make <stage>         # 段だけ回す (src hdf5 moab dagmc njoy openmc-exe openmc-lib wheel)
+make check           # cross で作った wheel をホストの venv に入れて検証 (核データ不要)
+make <stage>         # 段だけ回す (source hdf5 moab dagmc njoy openmc-exe openmc-lib wheel)
+make help            # ターゲット一覧
 ```
 
 wheel は全 TARGET を Docker クロスで作る。ホストのネイティブビルド経路は持たない
@@ -32,17 +32,17 @@ wheel は全 TARGET を Docker クロスで作る。ホストのネイティブ�
 ビルド手順そのものは mhd-tbr-stell/sandbox-openmc-source からの移植で、HDF5/MOAB/DAGMC の
 バージョンピンと CMake フラグの根拠はそちらのコメントに詳しい)。
 
-責務は3層に分かれる:
+責務は2層に分かれる:
 
 | 層 | 置き場 | 持つもの |
 |---|---|---|
 | 環境の事実 | `docker/Dockerfile_<triple>` の ENV | コンパイラ名・SDK・toolchain (`CC`/`CXX`/`FC`/`OTOOL`/`CMAKE_TOOLCHAIN_FILE`/`OPENMP_*`) |
-| 段取りと方針 | `build.py` | 段の依存・cmake フラグ・リンク方針 (`PLAT`/`RUNTIME_STATIC`/...)・自己完結の断言 |
-| メニュー | `makefile` | docker と gh の呼び出しだけ (94行) |
+| 段取りと方針 | `makefile` の `## A`〜`## B` | 段の依存・cmake フラグ・リンク方針 (`PLAT`/`RUNTIME_STATIC`/...)・自己完結の断言 |
 
-`build.py` の方針値はすべて同名の環境変数で上書きできるので、新しい toolchain を
-試すときに `build.py` を書き換えなくてよい。darwin の Fortran (NJOY) は LLVM flang の
-クロスで、通らない環境では `WITH_NJOY=0` で njoy 無し wheel に逃げられる。
+`## A`〜`## B` の外側は docker と検証の呼び出しだけのコマンドメニューに徹する。
+方針値はすべて同名の環境変数で上書きできるので、新しい toolchain を試すときに
+makefile を書き換えなくてよい。darwin の Fortran (NJOY) は LLVM flang のクロス。
+njoy は全 TARGET 必須 (逃げ道を作ると TARGET ごとに wheel の中身が変わってしまう)。
 
 ## CI/CD (prebuilt ブランチ)
 
@@ -51,7 +51,7 @@ wheel は全 TARGET を Docker クロスで作る。ホストのネイティブ�
 Release v<version> (pyproject.toml の version) に asset としてまとめて添付する。
 既存の pages workflow が PEP 503 simple index を再生成する (GITHUB_TOKEN で作った
 Release は release イベントを発火しないため、workflow_dispatch で明示起動している)。
-手動の `make release` は逃げ道として残っている。
+Release を作る経路はこの workflow だけ (makefile に手動 release は持たせない)。
 
 ## 設計判断と根拠
 
@@ -62,7 +62,7 @@ Release は release イベントを発火しないため、workflow_dispatch で
   問題を構造的に消す代わりにコンパイルは約2倍。
 - **wheel タグは `py3-none-<plat>`**: python パッケージは pure Python (ext_modules 無し) で、
   バイナリは ctypes / subprocess でしか触らないので CPython バージョンに依存しない。
-  タグは hatch_build.py が `OPENMC_ANYWHERE_PLAT` (build.py が注入) から組む。
+  タグは hatch_build.py が `OPENMC_ANYWHERE_PLAT` (makefile が注入) から組む。
 - **Linux は manylinux_2_28 コンテナ + auditwheel repair**: exe は静的 libgomp で glibc のみに
   依存 (ldd で断言)。共有 lib は gcc-toolset の `libgomp.a` が非 PIC で .so に畳めない (実測:
   TLS 再配置 R_X86_64_TPOFF32 でリンク失敗) ため動的 libgomp のままにし、素の linux_x86_64
@@ -93,7 +93,7 @@ Release は release イベントを発火しないため、workflow_dispatch で
   - `moab-skip-tools.patch` / `dagmc-static-hdf5.patch` — 各ビルドの静的リンク調整
 - **共有 lib は out/<triple>/ 経由で wheel に入る**: 上流 CMake の POST_BUILD は
   ソースツリー openmc/lib/ にコピーするが、そこは全 TARGET 共有で同 OS の 2 arch
-  (linux の x86_64/aarch64 など) が同名衝突する。build.py がビルド直後に
+  (linux の x86_64/aarch64 など) が同名衝突する。makefile がビルド直後に
   out/<triple>/ へ退避し、hatch_build.py の force_include はそちらを拾う。
 - **pyproject は自前の thin 定義** (hatchling): 上流 pyproject は setuptools-scm の dynamic
   version が submodule の git メタデータに依存するため使わない。version はここで静的に固定し、
@@ -113,7 +113,7 @@ Release は release イベントを発火しないため、workflow_dispatch で
    `HDF5_USE_STATIC_LIBRARIES=ON` が必要 (実測: moab の configure で
    `Could NOT find HDF5` )。ただし **同じフラグを Windows に渡すとリンク順が変わって
    逆に壊れる** (実測: それまで通っていた exe リンクが `H5Aopen_name` 未解決で失敗)
-   ため、build.py では Linux 限定にしている (`HDF5_STATIC_ARG`)。
+   ため、makefile では Windows 以外に限定している (`HDF5_STATIC_ARG`)。
 3. **リンク順問題**: CMake が組むリンク行は `...libhdf5.a ... libMOAB.a` の順になり、
    単一パスの ld では MOAB の mhdf だけが使う deprecated API (`H5Aopen_name` /
    `H5Fis_hdf5`) が未解決になる (他の H5 シンボルは libopenmc が先に引き込んだ

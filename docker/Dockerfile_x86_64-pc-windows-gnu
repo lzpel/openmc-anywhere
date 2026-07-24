@@ -8,8 +8,8 @@
 FROM ubuntu:24.04
 
 # update-alternatives で posix スレッド版に固定 (cadrum と同じ)。OpenMC の std::thread は
-# winpthreads 前提で、build.py の -static が libwinpthread ごと畳む (MSYS2 ホストで実証済み)。
-# gfortran は NJOY 用。libgomp.a は gcc-mingw-w64 の posix 版に同梱され、build.py の
+# winpthreads 前提で、makefile の -static が libwinpthread ごと畳む (MSYS2 ホストで実証済み)。
+# gfortran は NJOY 用。libgomp.a は gcc-mingw-w64 の posix 版に同梱され、makefile の
 # `$(CXX) -print-file-name=libgomp.a` がそのまま解決する (OPENMP_LIB_NAME=gomp の既定通り)。
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git make patch file cmake python3 \
@@ -20,9 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
  && rm -rf /var/lib/apt/lists/*
 
-# toolchain.cmake (cmake >=3.21 は環境変数 CMAKE_TOOLCHAIN_FILE を読む → build.py 無改造で
+# toolchain.cmake (cmake >=3.21 は環境変数 CMAKE_TOOLCHAIN_FILE を読む → makefile 無改造で
 # 全 cmake 呼び出しがクロス化する。darwin 版と同じ方式)。CMAKE_SYSTEM_NAME=Windows が肝:
-# .dll/.exe 拡張子・WIN32 判定が build.py と上流 CMake の前提。
+# .dll/.exe 拡張子・WIN32 判定が makefile と上流 CMake の前提。
 RUN { \
       echo "set(CMAKE_SYSTEM_NAME Windows)"; \
       echo "set(CMAKE_SYSTEM_PROCESSOR x86_64)"; \
@@ -32,7 +32,7 @@ RUN { \
       echo "set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)"; \
     } > /opt/toolchain.cmake
 
-# build.py が読む環境契約 (これで環境依存が全部イメージに閉じる)
+# makefile が読む環境契約 (これで環境依存が全部イメージに閉じる)
 ENV CC=x86_64-w64-mingw32-gcc \
     CXX=x86_64-w64-mingw32-g++ \
     FC=x86_64-w64-mingw32-gfortran \

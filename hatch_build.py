@@ -1,6 +1,6 @@
 """wheel にプラットフォームタグとバイナリを与えるビルドフック。
 
-build.py が環境変数で全てを注入する (sys.platform 分岐を持たない。クロスビルドでは
+makefile が環境変数で全てを注入する (sys.platform 分岐を持たない。クロスビルドでは
 ホスト OS とターゲット OS が食い違うため、ホスト検出はそもそも成立しない):
 
 - OPENMC_ANYWHERE_PLAT:  wheel プラットフォームタグ (win_amd64 / linux_x86_64 /
@@ -9,7 +9,7 @@ build.py が環境変数で全てを注入する (sys.platform 分岐を持た�
 - OPENMC_ANYWHERE_OUT:   per-target 出力ディレクトリ (out/<triple>)。libopenmc と実行ファイルは
   ここから拾う。上流 CMake の POST_BUILD はソースツリー openmc/lib/ にコピーするが、
   そこは全 TARGET 共有で同 OS の 2 arch (linux の x86_64/aarch64 など) が同名衝突する
-  ため、build.py が out/<triple>/ へ退避したコピーを正とする。pyproject の exclude
+  ため、makefile が out/<triple>/ へ退避したコピーを正とする。pyproject の exclude
   (*.a *.dll *.so *.dylib) がソースツリー側の残骸を一括で締め出し、force_include
   (exclude より優先) が out/ の正しい1つだけを戻す。
 - OPENMC_ANYWHERE_SOEXT: 共有ライブラリ拡張子 (dll / so / dylib)。dll なら実行ファイルは .exe。
