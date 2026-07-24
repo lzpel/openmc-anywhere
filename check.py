@@ -9,13 +9,13 @@ OpenMC の回帰テストの責務であって、ここで断面積を持ち込�
 5経路を通す:
   (a) exe:   PATH 上の openmc(.exe) が --version で起動し、build info の DAGMC が yes
   (b) lib:   openmc.lib の import で同梱 libopenmc.{dll,so,dylib} が CDLL でロードされ、
-             DAGMC/UWUW/libMesh の各フラグが build.py の cmake 指定と一致する
+             DAGMC/UWUW/libMesh の各フラグが makefile の cmake 指定と一致する
   (c) model: 核データ不要の範囲の Python API (材料・幾何・タリー → model.xml 書き出し)
   (d) dagmc: 引数に .h5m を渡すとトポロジを検査 (上流 legacy テストモデルで 5 cells / 21 surfaces)
   (e) njoy:  同梱 njoy が空デッキ (stop カードのみ) で起動して正常終了する
 
 生成物 (model.xml, njoy の output 等) はカレントに落ちるので使い捨てディレクトリで実行する
-(build.py の check がそうしている)。
+(makefile の check がそうしている)。
 """
 
 import argparse
@@ -86,7 +86,7 @@ def main():
     assert build_info.get("DAGMC support") == "yes", info
 
     # (b) 共有ライブラリ経路。これらは in_dll の定数読み出しなので openmc.lib.init() 不要
-    # (upstream openmc/lib/__init__.py)。build.py の cmake 指定と1対1で突き合わせる。
+    # (upstream openmc/lib/__init__.py)。makefile の cmake 指定と1対1で突き合わせる。
     flags = {
         "dagmc": openmc.lib._dagmc_enabled(),    # -DOPENMC_USE_DAGMC=ON
         "uwuw": openmc.lib._uwuw_enabled(),      # -DOPENMC_USE_UWUW=OFF

@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-This repository's own build tooling (makefile, build.py, hatch_build.py, the
+This repository's own build tooling (makefile, hatch_build.py, the
 patches under src/) is covered by the MIT license above.
 
 Third-party components redistributed in the built wheel keep their own terms:
