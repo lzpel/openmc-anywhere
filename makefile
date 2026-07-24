@@ -11,12 +11,6 @@ OS := $(if $(findstring windows,$(TARGET)),windows,$(if $(findstring apple,$(TAR
 ARCH := $(firstword $(subst -, ,$(TARGET)))
 JOBS ?= 8
 
-# 組み込み既定 (cc / f77、mingw の make は CXX に x86_64-w64-mingw32-g++) を避ける。
-# OTOOL に既定は不要 — 使う darwin の wheel 段は必ず ENV OTOOL を持つ container で走る。
-CC := $(if $(filter default,$(origin CC)),gcc,$(CC))
-CXX := $(if $(filter default,$(origin CXX)),g++,$(CXX))
-FC := $(if $(filter default,$(origin FC)),gfortran,$(FC))
-
 BUILD := build/$(TARGET)
 OUT := out/$(TARGET)
 # ここだけ絶対パス。LINK_TAIL の .a は cmake が相対のままリンク行へ通すが、
@@ -66,8 +60,8 @@ OPENMP_LIB ?= $(shell $(CXX) -print-file-name=lib$(OPENMP_LIB_NAME).a)
 OPENMP_STATIC = -DOpenMP_CXX_LIB_NAMES=$(OPENMP_LIB_NAME) -DOpenMP_C_LIB_NAMES=$(OPENMP_LIB_NAME) -DOpenMP_$(OPENMP_LIB_NAME)_LIBRARY=$(OPENMP_LIB) $(if $(OPENMP_FLAGS),-DOpenMP_C_FLAGS=$(OPENMP_FLAGS) -DOpenMP_CXX_FLAGS=$(OPENMP_FLAGS))
 
 # PIC は linux で静的 archive を libopenmc.so に畳むのに必須 (PE では no-op)。
-CMAKE_COMMON := -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=$(PREFIX)
-OPENMC_CMAKE := $(CMAKE_COMMON) -DHDF5_ROOT=$(PREFIX) -DHDF5_PREFER_PARALLEL=FALSE -DOPENMC_USE_OPENMP=ON -DOPENMC_BUILD_TESTS=OFF -DOPENMC_FORCE_VENDORED_LIBS=ON -DOPENMC_USE_MPI=OFF -DOPENMC_USE_LIBMESH=OFF -DOPENMC_USE_DAGMC=ON -DOPENMC_USE_UWUW=OFF -DCMAKE_PREFIX_PATH=$(PREFIX) $(HDF5_STATIC_ARG) $(LINK_TAIL)
+CMAKE_COMMON := -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=$(PREFIX)
+OPENMC_CMAKE := $(CMAKE_COMMON) -DHDF5_ROOT=$(PREFIX) -DHDF5_PREFER_PARALLEL=FALSE -DOPENMC_BUILD_TESTS=OFF -DOPENMC_FORCE_VENDORED_LIBS=ON -DOPENMC_USE_DAGMC=ON -DCMAKE_PREFIX_PATH=$(PREFIX) $(HDF5_STATIC_ARG) $(LINK_TAIL)
 
 # 上流 POST_BUILD の落とし先は全 TARGET 共有で同 OS の 2 arch が同名衝突するため、
 # per-target の out/ へ退避する。hatch_build.py はそちらを拾う。
@@ -101,28 +95,29 @@ source:
 	find src -maxdepth 1 -name '*.patch' | sort | xargs -IX sh -c 'patch -p1 -d src/$$(basename X | cut -d- -f1) < X'
 
 # 静的にして Windows の DLL シンボル export 問題を丸ごと回避する。
+# 上流の既定と同じ値のフラグは渡さない (cmake の既定に任せる)。以下の各段も同様。
 hdf5: source
-	cmake -S src/hdf5 -B $(BUILD)/hdf5 $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF -DHDF5_ENABLE_THREADSAFE=OFF -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DHDF5_ENABLE_ZLIB_SUPPORT=OFF
+	cmake -S src/hdf5 -B $(BUILD)/hdf5 $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF
 	cmake --build $(BUILD)/hdf5 -j $(JOBS)
 	cmake --install $(BUILD)/hdf5
 
 # 静的が肝 — 共有だと MSVC 構文のフラグ (/DMOAB_DLL) が GCC に渡って落ちる。
 moab: hdf5
-	cmake -S src/moab -B $(BUILD)/moab $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DENABLE_HDF5=ON -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DENABLE_BLASLAPACK=OFF -DENABLE_FORTRAN=OFF -DENABLE_TESTING=OFF -DENABLE_PYMOAB=OFF -DENABLE_NETCDF=OFF -DENABLE_MPI=OFF -DENABLE_METIS=OFF -DENABLE_ZOLTAN=OFF -DENABLE_PARMETIS=OFF -DENABLE_TEMPESTREMAP=OFF -DENABLE_CGNS=OFF -DENABLE_CPM=OFF
+	cmake -S src/moab -B $(BUILD)/moab $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DENABLE_HDF5=ON -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DENABLE_BLASLAPACK=OFF -DENABLE_FORTRAN=OFF -DENABLE_TESTING=OFF
 	cmake --build $(BUILD)/moab -j $(JOBS)
 	cmake --install $(BUILD)/moab
 
-# UWUW は PyNE を引き込むので特に切る。
+# UWUW と TALLY は既定 ON。UWUW は PyNE を引き込む。
 # DAGMCConfig.cmake は install prefix を焼き込むので最終位置に直接入れる。
 dagmc: moab
-	cmake -S src/dagmc -B $(BUILD)/dagmc $(CMAKE_COMMON) -DMOAB_DIR=$(PREFIX) -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_UWUW=OFF -DBUILD_TALLY=OFF -DBUILD_BUILD_OBB=OFF -DBUILD_MAKE_WATERTIGHT=OFF -DBUILD_OVERLAP_CHECK=OFF -DBUILD_TESTS=OFF -DBUILD_CI_TESTS=OFF -DBUILD_EXE=OFF -DBUILD_STATIC_EXE=OFF -DBUILD_RPATH=OFF -DDOUBLE_DOWN=OFF -DPULL_INSTALL_MOAB=OFF
+	cmake -S src/dagmc -B $(BUILD)/dagmc $(CMAKE_COMMON) -DMOAB_DIR=$(PREFIX) -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_UWUW=OFF -DBUILD_TALLY=OFF -DBUILD_BUILD_OBB=OFF -DBUILD_MAKE_WATERTIGHT=OFF -DBUILD_OVERLAP_CHECK=OFF -DBUILD_TESTS=OFF -DBUILD_EXE=OFF -DBUILD_RPATH=OFF
 	cmake --build $(BUILD)/dagmc -j $(JOBS)
 	cmake --install $(BUILD)/dagmc
 
 # 上流は PATH 上の literal 'njoy' を Popen するので openmc(.exe) と同じ同梱で成立する。
 # install ターゲットが無いので build dir から cp。uv の python は Windows で \ を返すので直す。
 njoy: source
-	cmake -S src/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=$(FC) -DPython3_EXECUTABLE=$(subst \,/,$(shell uv python find)) "-DCMAKE_EXE_LINKER_FLAGS=$(NJOY_STATIC)"
+	cmake -S src/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=$(subst \,/,$(shell uv python find)) "-DCMAKE_EXE_LINKER_FLAGS=$(NJOY_STATIC)"
 	cmake --build $(BUILD)/njoy -j $(JOBS) --target njoy_executable
 	mkdir -p $(OUT)
 	cp $(BUILD)/njoy/njoy$(EXE) $(NJOY_EXE)
