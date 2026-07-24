@@ -14,8 +14,8 @@
 # 注意: macOS SDK の利用は Xcode ライセンス上 Apple 製ハードウェアに限定されており、
 # Linux CI での使用は厳密にはグレー (osxcross 利用プロジェクトの一般的なやり方)。
 # SDK_URL は ARG なので自前ホストの tarball に差し替え可能。
-# flang で NJOY が通らない場合は `ENV WITH_NJOY=0` を足せば njoy 無し wheel になる
-# (fallback もイメージ内に閉じる)。
+# njoy は全 TARGET 必須 (wheel の依存段に固定)。flang で通らなくなったら逃げ道を作らず
+# ここの toolchain を直す — njoy 無し wheel を許すと TARGET ごとに中身が変わってしまう。
 FROM ubuntu:24.04
 
 # LLVM 21 が必須: flang-rt (Fortran ランタイムの runtimes ビルド) は 21 で導入された
