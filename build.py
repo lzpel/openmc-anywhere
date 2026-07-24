@@ -44,7 +44,7 @@ DEPS = {
     "njoy": ["src"],
     "openmc-exe": ["hdf5", "dagmc"],
     "openmc-lib": ["hdf5", "dagmc"],
-    "wheel": ["openmc-exe", "openmc-lib"],  # + njoy (WITH_NJOY=1 のとき)
+    "wheel": ["openmc-exe", "openmc-lib", "njoy"],
 }
 
 # 自己完結の許可リスト。ここに載らない動的依存が1つでも残っていたら失敗させる。
@@ -430,16 +430,14 @@ def stage_wheel(c):
     env["OPENMC_ANYWHERE_PLAT"] = c.plat_build
     env["OPENMC_ANYWHERE_OUT"] = f"out/{c.target}"
     env["OPENMC_ANYWHERE_SOEXT"] = c.soext
-    if with_njoy():
-        env["OPENMC_ANYWHERE_NJOY"] = pp(c.njoy_exe)
+    env["OPENMC_ANYWHERE_NJOY"] = pp(c.njoy_exe)
     c.run(["uv", "build", "--wheel", "--out-dir", "dist"], env=env)
 
     # 自己完結の断言。ここで落とすことが wheel のプラットフォームタグの根拠になる。
     if c.os in ("linux", "darwin"):
         assert_self_contained(c, c.shlib_out, "lib")
         assert_self_contained(c, c.exe, "exe")
-        if with_njoy():
-            assert_self_contained(c, c.njoy_exe, "njoy")
+        assert_self_contained(c, c.njoy_exe, "njoy")
 
     if c.os == "linux":
         # 素の linux_<arch> タグで作った wheel を auditwheel repair が libgomp.so.1 を
@@ -451,16 +449,16 @@ def stage_wheel(c):
     print(wheel_path(c))
 
 
-def stage_check(c, xsdir):
-    """wheel を venv に入れ、check.py の4経路 (subprocess / openmc.lib / DAGMC / njoy) を通す。
+def stage_check(c):
+    """wheel を venv に入れ、check.py の5経路 (exe / openmc.lib / model / DAGMC / njoy) を通す。
     PATH に venv の Scripts (bin) を前置するのが肝: python を直接叩くだけでは PATH に乗らず、
-    上流 executor.py の literal 'openmc' 解決 (利用者が activate した状態の再現) が失敗する。"""
+    上流 executor.py の literal 'openmc' 解決 (利用者が activate した状態の再現) が失敗する。
+    核データは要らない (check.py がデータ不要の経路だけに絞ってある)。"""
     if c.os == "windows":
         # objdump の断言2つ: DLL の import がシステム DLL のみ (自己完結の証明) と、
         # openmc_init をエクスポート (ctypes が読める形の証明)。
         assert_self_contained(c, c.shlib_out, "lib")
-        if with_njoy():
-            assert_self_contained(c, c.njoy_exe, "njoy")
+        assert_self_contained(c, c.njoy_exe, "njoy")
         if not c.dry and "openmc_init" not in c.capture(["objdump", "-p", pp(c.shlib_out)]):
             sys.exit("openmc_init not exported")
 
@@ -475,11 +473,9 @@ def stage_check(c, xsdir):
         rundir.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
-    env["OPENMC_CROSS_SECTIONS"] = f"{xsdir}/lib/cross_sections.xml"
     c.run(
         [bindir / ("python.exe" if c.os == "windows" else "python"), pp(ROOT / "check.py"),
-         pp(SRC / "openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m"),
-         "--endf", f"{xsdir}/endf/Li6.endf"],
+         pp(SRC / "openmc/tests/regression_tests/dagmc/legacy/dagmc.h5m")],
         env=env, cwd=None if c.dry else rundir,
     )
 
@@ -492,12 +488,6 @@ STAGES = {
 
 
 # ================================ ユーティリティ ================================
-
-
-def with_njoy():
-    """WITH_NJOY=0 で njoy 無し wheel になる (darwin の flang クロスが通らない場合の
-    逃げ道。docker ENV で立てればイメージ内に閉じる)。"""
-    return os.environ.get("WITH_NJOY", "1") == "1"
 
 
 def copy(c, src, dst):
@@ -541,7 +531,6 @@ def main():
     ap.add_argument("stage", choices=list(STAGES) + ["check", "path"])
     ap.add_argument("--target", required=True)
     ap.add_argument("--jobs", type=int, default=8)
-    ap.add_argument("--xsdir", default="", help="check 用の断面積データ置き場")
     ap.add_argument("--dry-run", action="store_true", help="コマンドを表示するだけで実行しない")
     a = ap.parse_args()
     c = Ctx(a.target, a.jobs, a.dry_run)
@@ -550,7 +539,7 @@ def main():
         print(wheel_path(c))
         return
     if a.stage == "check":
-        stage_check(c, a.xsdir)
+        stage_check(c)
         return
 
     done = set()
@@ -561,8 +550,6 @@ def main():
         done.add(name)
         for dep in DEPS[name]:
             run_stage(dep)
-        if name == "wheel" and with_njoy():
-            run_stage("njoy")
         print(f"===== {name} ({c.target}) =====", file=sys.stderr, flush=True)
         STAGES[name](c)
 

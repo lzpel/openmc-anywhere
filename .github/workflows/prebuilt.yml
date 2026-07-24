@@ -8,8 +8,8 @@
 #   (cadrum の prebuilt と同方式)。MSYS2 の CI 化は make の CURDIR が POSIX パスになり
 #   native cmake が解釈できず破綻した (run 29983656072) ため廃止。
 # - release ジョブ: 全 wheel を Release v<version> (pyproject.toml) に添付。既存タグなら
-#   asset を差し替える (softprops の挙動。CI 再実行で同版を更新できる。手動 make release の
-#   「タグ既存なら落ちる」とは意図的に違う)。
+#   asset を差し替える (softprops の挙動。CI 再実行で同版を更新できる)。Release を作る
+#   経路はここだけ (makefile に手動 release は持たせない)。
 # - 注意: デフォルト GITHUB_TOKEN で作った Release は release:published イベントを
 #   発火しない (GitHub の再帰防止仕様) ため、pages.yml は workflow_dispatch で明示起動する。
 name: prebuilt
