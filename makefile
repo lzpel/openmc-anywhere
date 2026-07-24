@@ -111,16 +111,10 @@ ALLOW_windows_njoy := $(ALLOW_WINDLL)
 assert = d=$$($(call DEPS_$(OS),$1)); echo "== deps of $(notdir $1) =="; echo "$$d"; ! echo "$$d" | grep -Eiv '$(ALLOW_$(OS)_$2)' | grep -q . || { echo "unexpected shared dependency in $(notdir $1)"; exit 1; }
 ASSERT_ALL = $(call assert,$(SHLIB_OUT),lib); $(call assert,$(OPENMC_EXE),exe); $(call assert,$(NJOY_EXE),njoy)
 
-# ---- 段の依存。.PHONY は使わないので段名は直下の実体と衝突させない (src/ があるので段は source) ----
-hdf5 njoy: source
-moab: hdf5
-dagmc: moab
-openmc-exe openmc-lib: hdf5 dagmc
-wheel: openmc-exe openmc-lib njoy
-
 # 上流は全部 submodule。openmc は full clone (タグが入り CMake の GetVersionFromGit が動く。
 # shallow だと openmc --version が 0.0.0 になる)。パッチの当て先はファイル名の最初の '-' より前。
 # 適用済みなら黙って飛ばす (-R --dry-run が通る = すでに当たっている、という判定)。
+# .PHONY は使わないので段名は直下の実体と衝突させない (src/ があるため段名は src ではなく source)。
 source:
 	git submodule update --init --recursive
 	for p in $(sort $(wildcard $(CURDIR)/src/*.patch)); do \
@@ -131,21 +125,21 @@ source:
 
 # 静的 (BUILD_SHARED_LIBS=OFF) にして Windows の DLL シンボル export 問題を丸ごと回避する。
 # OpenMC は C API と HL のみ使うので C++/Fortran/tools は全部切る。
-hdf5:
+hdf5: source
 	cmake -S $(CURDIR)/src/hdf5 -B $(BUILD)/hdf5 $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DHDF5_BUILD_EXAMPLES=OFF -DHDF5_BUILD_TOOLS=OFF -DHDF5_BUILD_HL_LIB=ON -DHDF5_BUILD_CPP_LIB=OFF -DHDF5_BUILD_FORTRAN=OFF -DHDF5_ENABLE_THREADSAFE=OFF -DHDF5_ENABLE_SZIP_SUPPORT=OFF -DHDF5_ENABLE_ZLIB_SUPPORT=OFF
 	cmake --build $(BUILD)/hdf5 -j $(JOBS)
 	cmake --install $(BUILD)/hdf5
 
 # .h5m は MOAB のファイル形式そのもので DAGMC はその上の薄い層。静的にするのが肝: 共有だと
 # MSVC 構文のフラグ (/DMOAB_DLL) が GCC に渡り落ちる。既定 ON で落ちるものは明示的に切る。
-moab:
+moab: hdf5
 	cmake -S $(CURDIR)/src/moab -B $(BUILD)/moab $(CMAKE_COMMON) -DBUILD_SHARED_LIBS=OFF -DENABLE_HDF5=ON -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DENABLE_BLASLAPACK=OFF -DENABLE_FORTRAN=OFF -DENABLE_TESTING=OFF -DENABLE_PYMOAB=OFF -DENABLE_NETCDF=OFF -DENABLE_MPI=OFF -DENABLE_METIS=OFF -DENABLE_ZOLTAN=OFF -DENABLE_PARMETIS=OFF -DENABLE_TEMPESTREMAP=OFF -DENABLE_CGNS=OFF -DENABLE_CPM=OFF
 	cmake --build $(BUILD)/moab -j $(JOBS)
 	cmake --install $(BUILD)/moab
 
 # UWUW と TALLY は既定 ON だが OpenMC は使わない (UWUW は PyNE を引き込むので特に切る)。
 # DAGMCConfig.cmake は install prefix を焼き込むので最終位置に直接入れる。
-dagmc:
+dagmc: moab
 	cmake -S $(CURDIR)/src/dagmc -B $(BUILD)/dagmc $(CMAKE_COMMON) -DMOAB_DIR=$(PREFIX) -DHDF5_ROOT=$(PREFIX) $(HDF5_STATIC_ARG) -DBUILD_STATIC_LIBS=ON -DBUILD_SHARED_LIBS=OFF -DBUILD_UWUW=OFF -DBUILD_TALLY=OFF -DBUILD_BUILD_OBB=OFF -DBUILD_MAKE_WATERTIGHT=OFF -DBUILD_OVERLAP_CHECK=OFF -DBUILD_TESTS=OFF -DBUILD_CI_TESTS=OFF -DBUILD_EXE=OFF -DBUILD_STATIC_EXE=OFF -DBUILD_RPATH=OFF -DDOUBLE_DOWN=OFF -DPULL_INSTALL_MOAB=OFF
 	cmake --build $(BUILD)/dagmc -j $(JOBS)
 	cmake --install $(BUILD)/dagmc
@@ -155,7 +149,7 @@ dagmc:
 # CMAKE_COMMON は使わない (Fortran 専用で C/C++・install prefix・PIC のどれも不要)。
 # Python3_EXECUTABLE: ホストの python は Microsoft Store のスタブなので uv 管理のものを名指す
 # (Windows ホストでは uv がバックスラッシュで返すので cmake に渡す前にスラッシュへ直す)。
-njoy:
+njoy: source
 	cmake -S $(CURDIR)/src/njoy -B $(BUILD)/njoy -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=$(FC) -DPython3_EXECUTABLE=$(subst \,/,$(shell uv python find)) "-DCMAKE_EXE_LINKER_FLAGS=$(NJOY_STATIC)"
 	cmake --build $(BUILD)/njoy -j $(JOBS) --target njoy_executable
 	mkdir -p $(OUT)
@@ -164,7 +158,7 @@ njoy:
 # OPENMC_STATIC_LIB=ON (src/openmc-static-lib.patch) で libopenmc を静的にし exe を自己完結にする。
 # DLL と exe を同じビルドでリンクすると MinGW の全シンボル自動エクスポートで _Unwind_Resume が
 # exe 側の静的 libgcc_eh.a と multiple definition になる (実測) ので、ビルドディレクトリごと分ける。
-openmc-exe:
+openmc-exe: hdf5 dagmc
 	cmake -S $(CURDIR)/src/openmc -B $(BUILD)/openmc-exe $(OPENMC_CMAKE) $(OPENMP_STATIC) -DOPENMC_STATIC_LIB=ON "-DCMAKE_EXE_LINKER_FLAGS=$(RUNTIME_STATIC)"
 	cmake --build $(BUILD)/openmc-exe -j $(JOBS)
 	cmake --install $(BUILD)/openmc-exe
@@ -180,7 +174,7 @@ OPENMP_SHARED = $(if $(filter linux,$(OS)),,$(OPENMP_STATIC))
 LDFLAGS_SHARED_linux := -Wl,--exclude-libs,ALL
 LDFLAGS_SHARED = $(strip $(RUNTIME_STATIC) $(LDFLAGS_SHARED_$(OS)))
 
-openmc-lib:
+openmc-lib: hdf5 dagmc
 	cmake -S $(CURDIR)/src/openmc -B $(BUILD)/openmc-lib $(OPENMC_CMAKE) $(OPENMP_SHARED) "-DCMAKE_SHARED_LINKER_FLAGS=$(LDFLAGS_SHARED)"
 	cmake --build $(BUILD)/openmc-lib -j $(JOBS) --target libopenmc
 	test -f $(SHLIB)
@@ -190,7 +184,7 @@ openmc-lib:
 # タグは py3-none-<plat> (hatch_build.py が OPENMC_ANYWHERE_PLAT から組む)。python パッケージは
 # pure Python なので CPython バージョン別の wheel は要らない。自己完結の断言をここで落とすことが
 # プラットフォームタグの根拠になる (windows の objdump 断言はホスト検証と同じ check 側に置く)。
-wheel:
+wheel: openmc-exe openmc-lib njoy
 	OPENMC_ANYWHERE_PLAT=$(PLAT_BUILD) OPENMC_ANYWHERE_OUT=out/$(TARGET) OPENMC_ANYWHERE_SOEXT=$(SOEXT) OPENMC_ANYWHERE_NJOY=$(NJOY_EXE) uv build --wheel --out-dir dist
 	$(if $(filter windows,$(OS)),true,$(ASSERT_ALL))
 	$(if $(filter linux,$(OS)),for w in $(CURDIR)/dist/openmc_anywhere-*-py3-none-$(PLAT_BUILD).whl; do auditwheel repair --plat $(PLAT) -w dist $$w && rm $$w; done,true)
