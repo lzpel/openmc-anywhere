@@ -1,6 +1,6 @@
 # OpenMC Anywhere
 
-Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel.
+OpenMC Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel (openmc executable + libopenmc shared library).
 
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/lzpel/openmc-anywhere/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/openmc-anywhere.svg?color=green)](https://pypi.org/pypi/openmc-anywhere)

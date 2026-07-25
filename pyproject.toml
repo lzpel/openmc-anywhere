@@ -15,7 +15,7 @@ name = "openmc-anywhere"
 # useless to pin against. PyPI never lets a filename be reused, so a rebuild always needs a
 # new build revision here.
 version = "0.15.3.0"
-description = "Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel"
+description = "OpenMC Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel (openmc executable + libopenmc shared library)"
 requires-python = ">=3.12"
 readme = "README.md"
 license = "MIT"
