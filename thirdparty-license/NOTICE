@@ -1,0 +1,17 @@
+openmc-anywhere redistributes prebuilt binaries of OpenMC, HDF5, DAGMC, MOAB and NJOY2016.
+
+MOAB is licensed under LGPL-3.0-or-later and is statically linked into the openmc
+executable and into libopenmc, which makes those binaries a Combined Work under LGPL-3.0.
+MOAB is modified: the patches applied are src/moab-basetsd-case.patch,
+src/moab-install-libdir-abs.patch and src/moab-skip-tools.patch in the source repository.
+Every other redistributed component is permissive (MIT, BSD-2-Clause, BSD-3-Clause style).
+
+Corresponding Source for every redistributed component is at
+https://github.com/lzpel/openmc-anywhere , at the tag matching the wheel version. Each
+component is pinned there as a git submodule under src/ ; "git submodule status" prints the
+exact upstream revision. Running "make cross-TRIPLE" at that tag rebuilds these binaries,
+which is how the relink freedom of LGPL-3.0 section 4(d)(0) is provided: substitute your own
+MOAB and rebuild.
+
+Full license texts are in thirdparty-license/ in that repository, and in every wheel under
+dist-info/licenses/thirdparty-license/ .

@@ -2,7 +2,7 @@
 
 Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel.
 
-[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/lzpel/openmc-anywhere/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/openmc-anywhere.svg?color=green)](https://pypi.org/pypi/openmc-anywhere)
 
 ## What is OpenMC Anywhere
@@ -14,11 +14,11 @@ The distribution name is openmc-anywhere; the import name is plain `openmc`, exa
 
 | | Target | Wheel tag | OpenMC | HDF5 | DAGMC | MOAB | NJOY |
 |:---:|:---|:---|:---|:---|:---|:---|:---|
-| ![img](figure/linux.svg) | `x86_64-unknown-linux-gnu` | `manylinux_2_28_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](figure/linux.svg) | `aarch64-unknown-linux-gnu` | `manylinux_2_28_aarch64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](figure/windows.svg) | `x86_64-pc-windows-gnu` | `win_amd64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](figure/apple.svg) | `x86_64-apple-darwin` | `macosx_11_0_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](figure/apple.svg) | `aarch64-apple-darwin` | `macosx_11_0_arm64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `x86_64-unknown-linux-gnu` | `manylinux_2_28_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `aarch64-unknown-linux-gnu` | `manylinux_2_28_aarch64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/windows.svg) | `x86_64-pc-windows-gnu` | `win_amd64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `x86_64-apple-darwin` | `macosx_11_0_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `aarch64-apple-darwin` | `macosx_11_0_arm64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
 
 ## Getting-started
 
@@ -69,9 +69,24 @@ url = "https://lzpel.github.io/openmc-anywhere/wheel/"
 
 ## License
 
-This repository's build tooling is MIT (see [LICENSE](./LICENSE)). The redistributed
+This repository's build tooling is MIT (see
+[LICENSE](https://github.com/lzpel/openmc-anywhere/blob/main/LICENSE)). The redistributed
 components keep their own terms: OpenMC (MIT), HDF5 (BSD-3-Clause style), DAGMC
-(BSD-3-Clause), NJOY2016 (LANL BSD-3-Clause style, shipped in the wheel's dist-info as
-`NJOY2016-LICENSE`), and **MOAB (LGPL-3.0)**. MOAB is statically linked into the `openmc`
-executable and into `libopenmc`, so redistributing these wheels carries the LGPL-3.0
-obligations for a Combined Work.
+(BSD-2-Clause), NJOY2016 (LANL BSD-3-Clause style), and **MOAB (LGPL-3.0-or-later)**.
+MOAB is statically linked into the `openmc` executable and into `libopenmc`, so
+redistributing these wheels carries the LGPL-3.0 obligations for a Combined Work.
+MOAB is modified here: see `src/moab-*.patch`.
+
+### Thirdparty Licenses
+
+Every license text is in
+[thirdparty-license/](https://github.com/lzpel/openmc-anywhere/tree/main/thirdparty-license),
+and each wheel ships the same set under `<dist-info>/licenses/thirdparty-license/`.
+[thirdparty-license/README.md](https://github.com/lzpel/openmc-anywhere/blob/main/thirdparty-license/README.md)
+maps each file to the component and version it covers.
+
+Corresponding Source for every redistributed component is this repository at the tag
+matching the wheel version. Each component is pinned as a git submodule under `src/`;
+`git submodule status` prints the exact upstream revision. `make cross-<triple>` at that
+tag rebuilds these binaries, which is how the relink freedom of LGPL-3.0 §4(d)(0) is
+provided: substitute your own MOAB and rebuild.

@@ -1,6 +1,8 @@
 # Release assets の wheel から PEP 503 simple index を組んで GitHub Pages に配る。
-# wheel 本体は git 履歴に入れない (Release asset)。index は releases API だけから
-# 生成できるので checkout 不要。Pages は build_type=workflow 設定済み。
+# wheel 本体は git 履歴に入れない (Release asset)。index 自体は releases API だけから
+# 生成できるが、GPL-3.0 §6(d) が要求する「object code の隣に置くソースの在処」を index に
+# 載せるため thirdparty-license/NOTICE の1ファイルだけ sparse checkout する (文言を
+# workflow に直書きすると README/Release と食い違うため)。Pages は build_type=workflow 設定済み。
 # 消費側: [[tool.uv.index]] url = "https://lzpel.github.io/openmc-anywhere/wheel/"
 name: pages
 on:
@@ -21,6 +23,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: thirdparty-license/NOTICE
+          sparse-checkout-cone-mode: false
       - name: generate simple index
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,7 +41,10 @@ jobs:
           {
             echo '<!DOCTYPE html><html><head><meta name="pypi:repository-version" content="1.0"></head><body>'
             while read -r u; do printf '<a href="%s">%s</a><br>\n' "$u" "$(basename "$u")"; done < urls.txt
-            echo '</body></html>'
+            # NOTICE は < > & を含まない前提で pre に素通しする (エスケープ不要)。
+            echo '<hr><pre>'
+            cat thirdparty-license/NOTICE
+            echo '</pre></body></html>'
           } > site/wheel/openmc-anywhere/index.html
           echo '<!DOCTYPE html><html><body><a href="openmc-anywhere/">openmc-anywhere</a></body></html>' \
             > site/wheel/index.html
