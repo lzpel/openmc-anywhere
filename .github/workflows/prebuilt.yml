@@ -51,11 +51,15 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # wheel の一次配布点は Release asset なので、GPL-3.0 §6(d) の「object code の隣に
+      # 置くソースの在処」は本文に載せる。文言は thirdparty-license/NOTICE が単一の正。
+      - run: |
+          { echo 'openmc + libopenmc + njoy bundled wheels'; echo; cat thirdparty-license/NOTICE; } > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: v${{ steps.v.outputs.version }}
-          body: openmc + libopenmc + njoy bundled wheels
+          body_path: release-body.md
           files: dist/*.whl
       # pages.yml は default ブランチの定義が起動される (-r 指定なし) ので、
       # prebuilt ブランチからの起動でも正しい index 生成が走る
