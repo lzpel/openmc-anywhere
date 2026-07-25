@@ -19,7 +19,8 @@ makefile が環境変数で全てを注入する (sys.platform 分岐を持た�
 openmc / njoy 実行ファイルは shared_scripts で wheel の .data/scripts/ に入れる。pip/uv が
 venv の Scripts (bin) に配置するので、上流 executor.py の PATH 解決 (literal 'openmc') と
 openmc/data/njoy.py の Popen(['njoy']) が無改造で通る。
-NJOY2016 の LICENSE (LANL の BSD-3 系、告知同梱で再配布可) を dist-info に同梱する。
+再配布物のライセンス告知はここでは扱わない (pyproject の license-files が thirdparty-license/
+ごと dist-info/licenses/ へ入れる)。
 """
 
 import os
@@ -44,4 +45,3 @@ class CustomBuildHook(BuildHookInterface):
         build_data["shared_scripts"] = {exe: os.path.basename(exe)}
         if njoy:
             build_data["shared_scripts"][njoy] = os.path.basename(njoy)
-            build_data["extra_metadata"] = {"src/njoy/LICENSE": "NJOY2016-LICENSE"}

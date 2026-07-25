@@ -12,7 +12,9 @@ name = "openmc-anywhere"
 version = "0.15.3.post214"
 description = "OpenMC Monte Carlo particle transport with bundled binaries (openmc executable + libopenmc shared library)"
 requires-python = ">=3.12"
+readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE", "thirdparty-license/*"]
 dependencies = [
     "numpy",
     "h5py",
