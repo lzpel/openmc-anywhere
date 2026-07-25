@@ -8,8 +8,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openmc-anywhere"
-# 上流 v0.15.3-214-g54b661d39 (submodule の pin) に対応。submodule を進めたら手で更新する
-version = "0.15.3.post214"
+# Upstream is v0.15.3-214-g54b661d39 (the src/openmc submodule pin). The leading 0.15.3 is
+# the upstream release; the last component is this repository's build revision, bumped on
+# every rebuild of the same upstream release. The commit distance (214) is deliberately kept
+# out of the version: it moves with every submodule bump, which would make the version
+# useless to pin against. PyPI never lets a filename be reused, so a rebuild always needs a
+# new build revision here.
+version = "0.15.3.0"
 description = "OpenMC Monte Carlo particle transport with bundled binaries (openmc executable + libopenmc shared library)"
 requires-python = ">=3.12"
 readme = "README.md"
