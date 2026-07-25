@@ -1,0 +1,17 @@
+file(APPEND) inside install(CODE) resolves a relative path against the CWD of the install run, so
+the relative CMAKE_INSTALL_LIBDIR drops lib/moab.make where make was invoked instead of the prefix.
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -893,10 +893,10 @@
+     DESTINATION ${MOABPKGCONFIG_LOCATION}
+     )
+   install(CODE
+-    "file(APPEND  ${CMAKE_INSTALL_LIBDIR}/moab.make MOAB_LIBDIR=${CMAKE_INSTALL_FULL_LIBDIR}\\n )"
++    "file(APPEND  ${CMAKE_INSTALL_FULL_LIBDIR}/moab.make MOAB_LIBDIR=${CMAKE_INSTALL_FULL_LIBDIR}\\n )"
+     )
+   install(CODE
+-    "file(APPEND  ${CMAKE_INSTALL_LIBDIR}/moab.make MOAB_INCLUDES=-I${CMAKE_INSTALL_FULL_INCLUDEDIR}\\n )"
++    "file(APPEND  ${CMAKE_INSTALL_FULL_LIBDIR}/moab.make MOAB_INCLUDES=-I${CMAKE_INSTALL_FULL_INCLUDEDIR}\\n )"
+     )
+ else()
+   set(MOABConfigLocation ${SKBUILD_DATA_DIR}/${MOABConfigLocation})
