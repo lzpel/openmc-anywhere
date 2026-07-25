@@ -51,7 +51,7 @@ $ pip install openmc-anywhere && python main.py
 # or
 $ uv add openmc-anywhere && uv run main.py
 
-openmc 0.15.3.post214  TBR = 0.2683 +/- 0.0004
+openmc 0.15.3.0  TBR = 0.2683 +/- 0.0004
 ```
 
 ```python
