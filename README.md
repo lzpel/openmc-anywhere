@@ -2,6 +2,8 @@
 
 OpenMC Monte Carlo Particle Transport Code with unofficial Windows/Apple/Linux pypi wheel (openmc executable + libopenmc shared library).
 
+Let's type `pip install openmc-anywhere` or `uv add openmc-anywhere`, and write your script with `import openmc`
+
 [![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/lzpel/openmc-anywhere/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/openmc-anywhere.svg?color=green)](https://pypi.org/pypi/openmc-anywhere)
 
@@ -56,15 +58,6 @@ openmc 0.15.3.0  TBR = 0.2683 +/- 0.0004
 
 ```python
 openmc.data.IncidentNeutron.from_njoy("n-092_U_235.endf", temperatures=[300, 600, 900])
-```
-
-```toml
-[tool.uv.sources]
-openmc-anywhere = { index = "openmc-anywhere" }
-
-[[tool.uv.index]]
-name = "openmc-anywhere"
-url = "https://lzpel.github.io/openmc-anywhere/wheel/"
 ```
 
 ## License
