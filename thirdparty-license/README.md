@@ -6,7 +6,7 @@ submodule in this repository.
 
 | File | Component | Version | License |
 |:---|:---|:---|:---|
-| `OpenMC-LICENSE` | [OpenMC](https://github.com/openmc-dev/openmc) | 0.15.3.post214 | MIT |
+| `OpenMC-LICENSE` | [OpenMC](https://github.com/openmc-dev/openmc) | 0.16.0 | MIT |
 | `HDF5-LICENSE` | [HDF5](https://github.com/HDFGroup/hdf5) | 2.1.1 | BSD-3-Clause style |
 | `DAGMC-LICENSE` | [DAGMC](https://github.com/svalinn/DAGMC) | 3.2.4 | BSD-2-Clause |
 | `MOAB-LICENSE` | [MOAB](https://bitbucket.org/fathomteam/moab) | 5.6.0 | **LGPL-3.0-or-later** |

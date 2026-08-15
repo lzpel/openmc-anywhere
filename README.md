@@ -16,11 +16,11 @@ The distribution name is openmc-anywhere; the import name is plain `openmc`, exa
 
 | | Target | Wheel tag | OpenMC | HDF5 | DAGMC | MOAB | NJOY |
 |:---:|:---|:---|:---|:---|:---|:---|:---|
-| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `x86_64-unknown-linux-gnu` | `manylinux_2_28_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `aarch64-unknown-linux-gnu` | `manylinux_2_28_aarch64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/windows.svg) | `x86_64-pc-windows-gnu` | `win_amd64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `x86_64-apple-darwin` | `macosx_11_0_x86_64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
-| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `aarch64-apple-darwin` | `macosx_11_0_arm64` | 0.15.3.post214 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `x86_64-unknown-linux-gnu` | `manylinux_2_28_x86_64` | 0.16.0 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/linux.svg) | `aarch64-unknown-linux-gnu` | `manylinux_2_28_aarch64` | 0.16.0 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/windows.svg) | `x86_64-pc-windows-gnu` | `win_amd64` | 0.16.0 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `x86_64-apple-darwin` | `macosx_11_0_x86_64` | 0.16.0 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
+| ![img](https://raw.githubusercontent.com/lzpel/openmc-anywhere/main/figure/apple.svg) | `aarch64-apple-darwin` | `macosx_11_0_arm64` | 0.16.0 | 2.1.1 | 3.2.4 | 5.6.0 | 2016.79 |
 
 ## Getting-started
 
@@ -53,7 +53,7 @@ $ pip install openmc-anywhere && python main.py
 # or
 $ uv add openmc-anywhere && uv run main.py
 
-openmc 0.15.3.0  TBR = 0.2683 +/- 0.0004
+openmc 0.16.0.0  TBR = 0.2683 +/- 0.0004
 ```
 
 ```python
